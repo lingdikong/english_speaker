@@ -1,0 +1,11 @@
+# ONNX Runtime 预编译静态库要求的最低系统版本（与 Swift Package 的 platforms 保持一致）
+[env]
+MACOSX_DEPLOYMENT_TARGET = "13.4"
+IPHONEOS_DEPLOYMENT_TARGET = "16.0"
+
+# Android 15+ 设备可能使用 16KB 内存页；Google Play 要求 16KB 对齐
+[target.aarch64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
+
+[target.x86_64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]

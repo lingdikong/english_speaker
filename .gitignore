@@ -1,0 +1,23 @@
+/target
+/platforms/apple/SpeakerCore/SpeakerCoreFFI.xcframework
+/platforms/apple/SpeakerCore/Sources/SpeakerCore/SpeakerCore.swift
+/platforms/apple/SpeakerCore/.build
+/platforms/android/core/src/main/jniLibs
+/platforms/android/core/src/main/kotlin/app/englishspeaker/core/es_ffi.kt
+# models/ 随仓库分发（见 models/kokoro/README.md）
+models/**/*.part
+
+# 构建产物与本地环境
+node_modules/
+ui/web/dist/
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+xcuserdata/
+DerivedData/
+*.xcresult
+.DS_Store
+.env

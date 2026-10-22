@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Windows / macOS / Linux：核心层与桌面宿主的原生构建 + 测试
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  # iOS / macOS：XCFramework + Swift 绑定 + Swift 冒烟测试（经 FFI 调用真实核心）
+  apple:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: ./scripts/build-apple.sh
+      - run: swift test
+        working-directory: platforms/apple/SpeakerCore
+
+  # Android：arm64-v8a / x86_64 的 .so + Kotlin 绑定
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: ./scripts/build-android.sh
+
+  # 真实 Kokoro 模型：下载（缓存）后运行引擎集成测试与基准
+  kokoro:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: models
+          key: models-${{ hashFiles('scripts/fetch-models.sh') }}
+      - run: ./scripts/fetch-models.sh
+      - run: cargo test --release -p es-tts-kokoro
+      - run: cargo run --release -p es-tts-kokoro --example kokoro_bench -- models target/bench

@@ -1,0 +1,23 @@
+[package]
+name = "es-ffi"
+description = "UniFFI bindings (Swift / Kotlin) over es-runtime for iOS and Android."
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "es_ffi"
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+es-runtime.workspace = true
+thiserror.workspace = true
+log.workspace = true
+uniffi.workspace = true

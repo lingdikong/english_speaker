@@ -1,0 +1,8 @@
+[package]
+name = "es-audio"
+description = "Chunk audio codecs implementing es-core AudioCodec (PCM s16 now, Opus planned)."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+es-core.workspace = true

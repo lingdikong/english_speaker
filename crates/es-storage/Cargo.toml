@@ -1,0 +1,10 @@
+[package]
+name = "es-storage"
+description = "SQLite implementation of es-core Storage."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+es-core.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true

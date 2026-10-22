@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>English Speaker 视觉设计 v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@500;600;700;800&family=Noto+Sans:wght@400;500&display=swap">
+<style>
+/* ===== 设计令牌 ===== */
+:root{
+  --ink-950:#05070D; --ink-900:#090C16; --ink-800:#10152A; --ink-700:#182038; --ink-600:#222B47; --line:#1A2138; --line-2:#262E48;
+  --text-1:#F1F4FB; --text-2:#A3ABC2; --text-3:#7F89A6;
+  --cyan:#33E1C8; --cyan-lt:#7CF0DD; --cyan-bg:rgba(51,225,200,.16);
+  --violet:#9D8CFF; --violet-lt:#C3B9FF; --violet-bg:rgba(157,140,255,.16);
+  --danger:#FFA3A3; --danger-bg:rgba(255,122,122,.14);
+  --display:'Space Grotesk',sans-serif; --ui:Manrope,'PingFang SC','Noto Sans SC',sans-serif; --ipa:'Noto Sans',sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ink-950);color:var(--text-1);font-family:var(--ui);-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+.page{max-width:1820px;margin:0 auto;padding:72px 48px 120px;display:flex;flex-direction:column;gap:96px}
+.section-title{font-family:var(--display);font-weight:700;font-size:44px;letter-spacing:-.02em;margin:0 0 8px}
+.section-sub{color:var(--text-2);font-size:15px;margin:0 0 36px}
+.label{font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--text-2)}
+.panel{background:var(--ink-800);border-radius:20px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.row{display:flex;align-items:center}
+.wave{display:flex;align-items:center;gap:2px}
+.wave > i{display:block;flex:1;border-radius:2px}
+.wave.bottom{align-items:flex-end}
+svg{flex-shrink:0}
+.icon-btn{width:44px;height:44px;border-radius:999px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;color:var(--text-1)}
+.icon-btn.fill{background:var(--ink-700)}
+.play{border:none;border-radius:999px;background:var(--cyan);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 6px rgba(51,225,200,.14)}
+.chip{height:30px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;border:none;white-space:nowrap}
+.chip.cyan{background:var(--cyan-bg);color:var(--cyan-lt)}
+.chip.violet{background:var(--violet-bg);color:var(--violet-lt)}
+.chip.neutral{background:var(--ink-600);color:var(--text-1)}
+.chip.ghost{background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);color:var(--text-2)}
+.chip.danger{background:var(--danger-bg);color:var(--danger)}
+.mini-prog{width:28px;height:3px;border-radius:2px;background:rgba(124,240,221,.25);display:inline-flex}
+.mini-prog > b{display:block;height:3px;border-radius:2px;background:var(--cyan)}
+
+/* 跟读标注 */
+.tx{font-weight:800}
+.tx .read{color:var(--text-1)}
+.tx .up{color:var(--text-2)}
+.tx .now{color:var(--cyan);background:var(--cyan-bg);border-radius:10px;padding:1px 7px}
+.tx .weak{font-size:.82em;font-weight:700;color:var(--text-3)}
+.tx .weak.read{color:#C9CFDE}
+.tx .lk{color:var(--violet);font-weight:800}
+.tx .dot{border-bottom:2px dotted var(--violet)}
+
+/* 手机外框（仅展示用） */
+.phones{display:flex;flex-wrap:wrap;gap:48px}
+.phone-wrap{display:flex;flex-direction:column;gap:14px}
+.phone-name{font-size:14px;font-weight:700;color:var(--text-2)}
+.phone{width:390px;height:844px;border-radius:48px;background:var(--ink-900);box-shadow:0 0 0 10px #151a28,0 0 0 11px #262d42,0 40px 80px rgba(0,0,0,.5);overflow:hidden;position:relative;display:flex;flex-direction:column}
+.cover{background:#141A2E;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center}
+
+/* 底部导航 */
+.tabbar{height:80px;flex-shrink:0;background:var(--ink-800);box-shadow:inset 0 1px 0 var(--line);display:grid;grid-template-columns:repeat(3,1fr);padding-bottom:16px}
+.tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--text-2);text-decoration:none;font-size:11px;font-weight:700}
+.tabbar a.on{color:var(--cyan);font-weight:800}
+</style>
+</head>
+<body>
+<main class="page">
+
+<!-- ===================== 1. 设计规范 ===================== -->
+<section>
+  <div class="row" style="justify-content:space-between;gap:32px;margin-bottom:48px">
+    <div class="row" style="gap:16px">
+      <div style="width:56px;height:56px;border-radius:16px;background:var(--cyan);display:flex;align-items:center;justify-content:center;gap:3px">
+        <i style="width:4px;height:14px;border-radius:2px;background:var(--ink-900)"></i>
+        <i style="width:4px;height:26px;border-radius:2px;background:var(--ink-900)"></i>
+        <i style="width:4px;height:36px;border-radius:2px;background:var(--ink-900)"></i>
+        <i style="width:4px;height:22px;border-radius:2px;background:var(--ink-900)"></i>
+        <i style="width:4px;height:12px;border-radius:2px;background:var(--ink-900)"></i>
+      </div>
+      <div>
+        <div style="font-family:var(--display);font-weight:700;font-size:32px;letter-spacing:-.02em">English Speaker</div>
+        <div style="color:var(--text-2);font-size:14px">视觉规范 v1 · 深色沉浸 / 声波</div>
+      </div>
+    </div>
+    <p style="max-width:620px;margin:0;color:var(--text-2);font-size:15px;line-height:24px;text-align:right">
+      原文是主角，声波是进度。播放器以“句子”为单位组织：信号青只标记正在发生的事（播放、当前词、进度），紫外紫只用于发音标注。封面是由文章生成的声纹，而不是彩色渐变图。
+    </p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:56px;margin-bottom:56px">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="label">色彩</div>
+      <div id="swatches" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="label">字体</div>
+      <div class="panel" style="padding:24px;display:flex;flex-direction:column;gap:14px">
+        <div class="row" style="justify-content:space-between;align-items:baseline;gap:16px"><span style="font-family:var(--display);font-weight:700;font-size:34px;letter-spacing:-.02em">资料库 Library</span><span style="font-size:12px;color:var(--text-2)">Space Grotesk 34/40 · 页面标题</span></div>
+        <div class="row" style="justify-content:space-between;align-items:baseline;gap:16px"><span style="font-family:var(--display);font-weight:600;font-size:22px">继续收听 Continue</span><span style="font-size:12px;color:var(--text-2)">Space Grotesk 22/28 · 区块标题</span></div>
+        <div class="row" style="justify-content:space-between;align-items:baseline;gap:16px"><span style="font-weight:800;font-size:26px;line-height:36px">Pick it up and put it on.</span><span style="font-size:12px;color:var(--text-2)">Manrope 26/36 · 当前句</span></div>
+        <div class="row" style="justify-content:space-between;align-items:baseline;gap:16px"><span style="font-weight:700;font-size:20px;color:var(--text-3)">Did you see it?</span><span style="font-size:12px;color:var(--text-2)">Manrope 20/30 · 其它句</span></div>
+        <div class="row" style="justify-content:space-between;align-items:baseline;gap:16px"><span style="font-weight:500;font-size:15px">正文与列表 Body text</span><span style="font-size:12px;color:var(--text-2)">Manrope 15/22 · 正文</span></div>
+        <div class="row" style="justify-content:space-between;align-items:baseline;gap:16px"><span style="font-family:var(--ipa);font-size:18px;color:var(--violet)">/pˈʊɾ ɪt/ · /ən/ · /dɪʤu/</span><span style="font-size:12px;color:var(--text-2)">Noto Sans 18 · 音标</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:56px;margin-bottom:56px">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="label">图标 · 1.75px 圆头线性，24 栅格（实现时采用 Lucide / Phosphor 等 MIT 许可图标库）</div>
+      <div id="icons" style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="label">组件</div>
+      <div class="panel" style="padding:24px;display:flex;flex-direction:column;gap:22px">
+        <div class="row" style="gap:16px;flex-wrap:wrap">
+          <button class="play" style="width:64px;height:64px" aria-label="播放"><svg width="26" height="26" viewBox="0 0 24 24" fill="#090C16"><path d="M7 4.5v15l12-7.5z"/></svg></button>
+          <button style="height:44px;padding:0 20px;border-radius:999px;border:none;background:var(--cyan);color:var(--ink-900);font-weight:800;font-size:15px">开始转换</button>
+          <button style="height:44px;padding:0 18px;border-radius:999px;border:none;background:var(--ink-600);color:var(--text-1);font-weight:700;font-size:15px">1.0×</button>
+          <button class="chip violet" style="height:44px;padding:0 16px;font-size:14px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8c2.5 4 6 4 8 0s5.5-4 8 0"/></svg>跟读标注</button>
+        </div>
+        <div class="row" style="gap:10px;flex-wrap:wrap">
+          <span class="chip cyan"><span class="mini-prog"><b style="width:12px"></b></span>转换中 4/9</span>
+          <span class="chip neutral"><svg width="13" height="13" viewBox="0 0 24 24" fill="#33E1C8"><path d="M6 3.5h12v17l-6-4-6 4z"/></svg>已保存</span>
+          <span class="chip ghost">未转换</span>
+          <span class="chip neutral" style="color:var(--text-2)">排队中</span>
+          <span class="chip danger">失败 · 重试</span>
+        </div>
+        <div>
+          <div class="wave bottom" data-seed="scrub" data-n="64" data-min="8" data-max="40" data-played="22" data-buffered="44" style="height:40px;gap:3px"></div>
+          <div class="row" style="justify-content:space-between;margin-top:8px;font-size:12px;font-weight:600;color:var(--text-2)"><span>1:02　声波进度条：已播（青）/ 已转换（灰）/ 未转换（暗）</span><span>-2:41</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:56px">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="label">声纹封面 · 由文章 id 确定性生成，三端一致</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">
+        <div class="cover" style="aspect-ratio:1/1;border-radius:18px;padding:16px;flex-direction:column;justify-content:space-between;align-items:stretch">
+          <div class="row" style="justify-content:space-between;font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--cyan)"><span>EN</span><span>4 MIN</span></div>
+          <div class="wave" data-seed="Why We Should Walk More" data-n="22" data-min="6" data-max="72" data-color="#33E1C8" style="height:72px;gap:3px"></div>
+          <div style="font-family:var(--display);font-weight:700;font-size:19px;line-height:22px">Why We Should Walk More</div>
+        </div>
+        <div class="cover" style="aspect-ratio:1/1;border-radius:18px;padding:16px;flex-direction:column;justify-content:space-between;align-items:stretch">
+          <div class="row" style="justify-content:space-between;font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--violet)"><span>EN</span><span>6 MIN</span></div>
+          <div class="wave" data-seed="How Coffee Travelled the World" data-n="22" data-min="6" data-max="72" data-color="#9D8CFF" style="height:72px;gap:3px"></div>
+          <div style="font-family:var(--display);font-weight:700;font-size:19px;line-height:22px">How Coffee Travelled the World</div>
+        </div>
+        <div class="cover" style="aspect-ratio:1/1;border-radius:18px;padding:16px;flex-direction:column;justify-content:space-between;align-items:stretch">
+          <div class="row" style="justify-content:space-between;font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--cyan-lt)"><span>EN</span><span>3 MIN</span></div>
+          <div class="wave" data-seed="The Quiet Power of Mornings" data-n="22" data-min="6" data-max="72" data-color="#7CF0DD" style="height:72px;gap:3px"></div>
+          <div style="font-family:var(--display);font-weight:700;font-size:19px;line-height:22px">The Quiet Power of Mornings</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="label">跟读标注</div>
+      <div class="panel" style="padding:24px;display:flex;flex-direction:column;gap:20px">
+        <div class="tx" style="font-size:26px;line-height:42px">
+          <span class="read">Pick</span><span class="lk">‿</span><span class="read">it</span><span class="lk">‿</span><span class="now">up</span><span class="lk">‿</span><span class="weak">and</span>
+          <span class="up">put</span><span class="lk">‿</span><span class="up dot">it</span><span class="lk">‿</span><span class="up">on</span> <span class="weak">the</span> <span class="up">table.</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 24px;font-size:14px;color:var(--text-2)">
+          <div class="row tx" style="gap:10px"><span class="now">up</span><span style="font-weight:500">正在读的词（信号青胶囊）</span></div>
+          <div class="row tx" style="gap:10px"><span class="lk" style="font-size:20px">‿</span><span style="font-weight:500">连读（紫外紫）</span></div>
+          <div class="row tx" style="gap:10px"><span class="weak" style="font-size:13px">and</span><span style="font-weight:500">弱读：小一号、淡一级</span></div>
+          <div class="row tx" style="gap:10px"><span class="read dot">it</span><span style="font-weight:500">闪音 / 同化 / 省音：紫色点线</span></div>
+          <div class="row tx" style="gap:10px"><span class="read">Pick</span><span style="font-weight:500">已读：主文字色</span></div>
+          <div class="row tx" style="gap:10px"><span class="up">table</span><span style="font-weight:500">未读：次文字色</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 2. 移动端 ===================== -->
+<section>
+  <h2 class="section-title">移动端（iOS / Android）</h2>
+  <p class="section-sub">与 Apple Music 的主要区别：列表式资料库 + 声纹封面；播放页以原文为中心（不是大封面）；声波进度条；全宽底栏与迷你条（不是悬浮胶囊）；单句循环等学习控件。</p>
+  <div class="phones">
+
+    <!-- 2.1 资料库 -->
+    <div class="phone-wrap"><div class="phone-name">资料库</div>
+    <div class="phone">
+      <div style="flex:1;min-height:0;overflow:hidden;padding:60px 20px 0;display:flex;flex-direction:column;gap:20px">
+        <div class="row" style="justify-content:space-between">
+          <h1 style="margin:0;font-family:var(--display);font-weight:700;font-size:34px;letter-spacing:-.02em">资料库</h1>
+          <div class="row" style="gap:8px">
+            <button class="icon-btn fill" aria-label="搜索"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+            <button class="icon-btn" style="background:var(--cyan)" aria-label="导入文章"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#090C16" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+          </div>
+        </div>
+        <div class="row" style="gap:8px">
+          <button class="chip cyan" style="height:34px;font-weight:800;font-size:14px">全部 5</button>
+          <button class="chip neutral" style="height:34px;color:var(--text-2);background:var(--ink-700);font-size:14px">转换中 1</button>
+          <button class="chip neutral" style="height:34px;color:var(--text-2);background:var(--ink-700);font-size:14px">已保存</button>
+          <button class="chip neutral" style="height:34px;color:var(--text-2);background:var(--ink-700);font-size:14px">未转换</button>
+        </div>
+        <div class="panel" style="padding:16px;border-radius:22px;display:flex;flex-direction:column;gap:14px">
+          <div class="label">继续收听</div>
+          <div class="row" style="gap:14px">
+            <div class="cover" style="width:76px;height:76px;border-radius:16px;padding:0 10px"><div class="wave" data-seed="Why We Should Walk More" data-n="12" data-min="8" data-max="52" data-color="#33E1C8" style="height:52px;width:100%"></div></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-family:var(--display);font-weight:700;font-size:18px;line-height:22px">Why We Should Walk More</div>
+              <div style="font-size:13px;color:var(--text-2);margin-top:4px">第 4/9 句 · 剩余 2 分钟</div>
+            </div>
+            <button class="play" style="width:48px;height:48px;box-shadow:none" aria-label="继续播放"><svg width="20" height="20" viewBox="0 0 24 24" fill="#090C16"><path d="M7 4.5v15l12-7.5z"/></svg></button>
+          </div>
+          <div style="height:4px;border-radius:2px;background:var(--line-2)"><div style="width:42%;height:4px;border-radius:2px;background:var(--cyan)"></div></div>
+        </div>
+        <div>
+          <div style="font-family:var(--display);font-weight:600;font-size:20px;padding-bottom:4px">全部文章</div>
+          <div id="libRows"></div>
+        </div>
+      </div>
+      <div style="margin:0 12px 10px;border-radius:18px;background:var(--ink-700);box-shadow:0 10px 30px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.06);overflow:hidden">
+        <div class="wave bottom" data-seed="mini" data-n="60" data-min="2" data-max="6" data-played="26" data-buffered="60" data-dim="#2E3756" style="height:6px;gap:1px;padding:0 2px"></div>
+        <div class="row" style="gap:12px;padding:10px 6px 10px 12px">
+          <div class="cover" style="width:40px;height:40px;border-radius:10px;padding:0 7px;background:var(--ink-800)"><div class="wave" data-seed="Why We Should Walk More" data-n="6" data-min="6" data-max="26" data-color="#33E1C8" style="height:26px;width:100%"></div></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Why We Should Walk More</div>
+            <div style="font-size:13px;color:var(--cyan-lt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Doctors say that a short walk after…</div>
+          </div>
+          <button class="icon-btn" aria-label="暂停"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
+          <button class="icon-btn" aria-label="下一句"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5v14"/><path d="M5 6v12l9-6z"/></svg></button>
+        </div>
+      </div>
+      <nav class="tabbar" aria-label="主导航">
+        <a href="#"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>首页</a>
+        <a href="#" class="on" aria-current="page"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4v16H5zM11 4h4v16h-4z"/><path d="m17 5 3.5.8-3 14.6-3.5-.8"/></svg>资料库</a>
+        <a href="#"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>搜索</a>
+      </nav>
+    </div></div>
+
+    <!-- 2.2 播放（原文为中心） -->
+    <div class="phone-wrap"><div class="phone-name">播放 · 原文为中心</div>
+    <div class="phone" style="background:radial-gradient(120% 60% at 50% 0%, #121A33 0%, #090C16 60%)">
+      <div class="row" style="justify-content:space-between;padding:54px 12px 0">
+        <button class="icon-btn" aria-label="收起"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div style="font-size:13px;font-weight:700;color:var(--text-2)">第 4 / 9 句</div>
+        <button class="icon-btn" aria-label="更多"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+      </div>
+      <div class="row" style="gap:12px;padding:8px 20px 0">
+        <div class="cover" style="width:52px;height:52px;border-radius:12px;padding:0 8px"><div class="wave" data-seed="Why We Should Walk More" data-n="8" data-min="6" data-max="34" data-color="#33E1C8" style="height:34px;width:100%"></div></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-family:var(--display);font-weight:700;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Why We Should Walk More</div>
+          <div style="font-size:13px;color:var(--text-2)">Heart · 美音</div>
+        </div>
+        <button class="icon-btn fill" aria-label="保存"><svg width="20" height="20" viewBox="0 0 24 24" fill="#33E1C8"><path d="M6 3.5h12v17l-6-4-6 4z"/></svg></button>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow:hidden;padding:22px 20px 0;display:flex;flex-direction:column;gap:18px">
+        <div class="tx" style="font-size:19px;line-height:28px;color:var(--text-3);font-weight:700">We sit at our desks, we sit in the car, and then we sit on the sofa.</div>
+        <div style="padding:18px;border-radius:22px;background:rgba(24,32,56,.85);box-shadow:inset 0 0 0 1px rgba(51,225,200,.18)">
+          <div class="tx" style="font-size:26px;line-height:40px">
+            <span class="read">Doctors</span> <span class="read">say</span> <span class="weak read">that</span> <span class="weak read">a</span> <span class="read">short</span> <span class="now">walk</span><span class="lk">‿</span><span class="up">after</span>
+            <span class="up">each</span> <span class="up">meal</span><span class="lk">‿</span><span class="up">is</span> <span class="up">one</span><span class="lk">‿</span><span class="weak">of</span> <span class="weak">the</span> <span class="up">easiest</span> <span class="up">ways</span> <span class="weak">to</span> <span class="up">stay</span> <span class="up">healthy.</span>
+          </div>
+          <div class="row" style="gap:8px;margin-top:12px">
+            <span class="chip violet" style="height:26px;font-size:12px">3 处连读</span>
+            <span class="chip neutral" style="height:26px;font-size:12px;color:var(--text-2)">4 个弱读</span>
+          </div>
+        </div>
+        <div class="tx" style="font-size:19px;line-height:28px;color:var(--text-3);font-weight:700">It helps your heart, it clears your head, and it does not cost a thing.</div>
+        <div class="tx" style="font-size:19px;line-height:28px;color:#3C4560;font-weight:700">Did you know that walking can also make you more creative? <span class="chip cyan" style="height:22px;font-size:11px;vertical-align:middle">转换中</span></div>
+      </div>
+
+      <div style="padding:14px 20px 34px;display:flex;flex-direction:column;gap:16px">
+        <div>
+          <div class="wave bottom" data-seed="player" data-n="56" data-min="6" data-max="34" data-played="24" data-buffered="40" style="height:34px;gap:3px"></div>
+          <div class="row" style="justify-content:space-between;margin-top:6px;font-size:12px;font-weight:700;color:var(--text-2)"><span>1:02</span><span>约 -2:41</span></div>
+        </div>
+        <div class="row" style="justify-content:space-between">
+          <button class="chip neutral" style="height:40px;padding:0 14px;font-size:14px" aria-label="倍速">1.0×</button>
+          <button class="icon-btn" aria-label="上一句"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5v14"/><path d="M19 6v12l-9-6z"/></svg></button>
+          <button class="play" style="width:72px;height:72px" aria-label="暂停"><svg width="28" height="28" viewBox="0 0 24 24" fill="#090C16"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
+          <button class="icon-btn" aria-label="下一句"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5v14"/><path d="M5 6v12l9-6z"/></svg></button>
+          <button class="icon-btn" style="color:var(--cyan)" aria-label="单句循环"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l3 3-3 3"/><path d="M4 11V9a3 3 0 0 1 3-3h13"/><path d="M7 21l-3-3 3-3"/><path d="M20 13v2a3 3 0 0 1-3 3H4"/><path d="M11.5 10.5 13 9.5v5"/></svg></button>
+        </div>
+        <div class="row" style="justify-content:space-between">
+          <button class="chip violet" style="height:36px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8c2.5 4 6 4 8 0s5.5-4 8 0"/></svg>跟读标注</button>
+          <button class="chip neutral" style="height:36px;color:var(--text-2)">Heart · 美音</button>
+          <button class="icon-btn" aria-label="待播清单"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 6h11M4 12h11M4 18h7M18 14v6M15 17h6"/></svg></button>
+        </div>
+      </div>
+    </div></div>
+
+    <!-- 2.3 点词读音 -->
+    <div class="phone-wrap"><div class="phone-name">点词读音（底部面板）</div>
+    <div class="phone">
+      <div style="padding:110px 20px 0;opacity:.35;filter:blur(1px)">
+        <div class="tx" style="font-size:26px;line-height:40px">
+          <span class="read">Pick</span><span class="lk">‿</span><span class="read">it</span><span class="lk">‿</span><span class="read">up</span><span class="lk">‿</span><span class="weak read">and</span>
+          <span class="read">put</span><span class="lk">‿</span><span class="read dot">it</span><span class="lk">‿</span><span class="up">on</span> <span class="weak">the</span> <span class="up">table.</span>
+        </div>
+        <div class="tx" style="font-size:19px;line-height:28px;color:var(--text-3);font-weight:700;margin-top:18px">Did you get it at an early hour?</div>
+      </div>
+      <div style="position:absolute;left:0;right:0;bottom:0;background:var(--ink-800);border-radius:28px 28px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.08);padding:12px 22px 40px;display:flex;flex-direction:column;gap:18px">
+        <div style="width:40px;height:5px;border-radius:3px;background:#2E3756;align-self:center"></div>
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-family:var(--display);font-weight:700;font-size:34px;letter-spacing:-.01em">put<span style="color:var(--violet)">‿</span>it</div>
+            <div style="font-family:var(--ipa);font-size:20px;color:var(--violet-lt);margin-top:4px">/pˈʊɾ ɪt/</div>
+          </div>
+          <button class="icon-btn fill" aria-label="播放这个词"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>
+        </div>
+        <div class="row" style="gap:8px"><span class="chip violet">跨词闪音</span><span class="chip neutral" style="color:var(--text-2)">美式发音</span></div>
+        <div style="font-size:15px;line-height:24px;color:var(--text-2)">
+          <b style="color:var(--text-1)">put</b> 末尾的 t 夹在两个元音之间，读得像轻快的 d，并和后面的 <b style="color:var(--text-1)">it</b> 连成一个音节：<span style="font-family:var(--ipa);color:var(--violet-lt)">/pʊɾɪt/</span>，听起来像 “pu-dit”。
+        </div>
+        <div class="panel" style="padding:14px 16px;border-radius:16px;background:var(--ink-700);font-size:14px;color:var(--text-2);line-height:22px">
+          同类：<span class="tx" style="color:var(--text-1)">get<span class="lk">‿</span>it</span> · <span class="tx" style="color:var(--text-1)">what<span class="lk">‿</span>are</span> · <span class="tx" style="color:var(--text-1)">a lot<span class="lk">‿</span>of</span>
+        </div>
+        <div class="row" style="gap:10px">
+          <button style="flex:1;height:48px;border-radius:999px;border:none;background:var(--cyan);color:var(--ink-900);font-weight:800;font-size:15px">从这里播放</button>
+          <button style="flex:1;height:48px;border-radius:999px;border:none;background:var(--ink-600);color:var(--text-1);font-weight:700;font-size:15px">0.75× 慢放这句</button>
+        </div>
+      </div>
+    </div></div>
+
+    <!-- 2.4 导入 -->
+    <div class="phone-wrap"><div class="phone-name">导入文章</div>
+    <div class="phone" style="background:#06080F">
+      <div style="height:40px"></div>
+      <div style="flex:1;margin-top:14px;background:var(--ink-800);border-radius:28px 28px 0 0;padding:12px 20px 34px;display:flex;flex-direction:column;gap:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)">
+        <div style="width:40px;height:5px;border-radius:3px;background:#2E3756;align-self:center"></div>
+        <div class="row" style="justify-content:space-between">
+          <button class="icon-btn fill" aria-label="关闭"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          <div style="font-family:var(--display);font-weight:700;font-size:20px">导入文章</div>
+          <div style="width:44px"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);padding:4px;border-radius:14px;background:var(--ink-900)">
+          <button style="height:38px;border:none;border-radius:11px;background:var(--ink-600);color:var(--text-1);font-weight:800;font-size:14px">粘贴文本</button>
+          <button style="height:38px;border:none;border-radius:11px;background:transparent;color:var(--text-2);font-weight:700;font-size:14px">文件</button>
+          <button style="height:38px;border:none;border-radius:11px;background:transparent;color:var(--text-2);font-weight:700;font-size:14px">剪贴板</button>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:8px">
+          <span class="label">标题（可选）</span>
+          <input value="The Quiet Power of Mornings" style="height:48px;border-radius:14px;border:none;background:var(--ink-700);color:var(--text-1);padding:0 14px;font-family:var(--ui);font-size:15px;font-weight:600;outline:none">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:8px;flex:1;min-height:0">
+          <span class="label">正文</span>
+          <textarea style="flex:1;min-height:200px;resize:none;border-radius:14px;border:none;background:var(--ink-700);color:var(--text-1);padding:14px;font-family:var(--ui);font-size:15px;line-height:24px;outline:none">Most successful people have one thing in common: they protect the first hour of the day. Before the emails and the meetings, they read, walk, or simply sit with a cup of coffee.
+
+Mornings are quiet. That quiet is not empty — it is room to think.</textarea>
+        </label>
+        <div class="panel" style="padding:4px 14px;border-radius:16px;background:var(--ink-700)">
+          <div class="row" style="justify-content:space-between;height:52px;box-shadow:inset 0 -1px 0 var(--line-2)">
+            <span style="font-size:15px;font-weight:600">音色</span><span class="chip neutral" style="background:var(--ink-600)">Heart · 美音 ›</span>
+          </div>
+          <div class="row" style="justify-content:space-between;height:52px">
+            <span style="font-size:15px;font-weight:600">导入后立即播放</span>
+            <span role="switch" aria-checked="true" style="width:50px;height:30px;border-radius:999px;background:var(--cyan);position:relative;display:inline-block"><span style="position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:999px;background:var(--ink-900)"></span></span>
+          </div>
+        </div>
+        <div style="font-size:13px;color:var(--text-2);text-align:center">共 4 句 · 预计约 40 秒 · 离线转换，不上传</div>
+        <button style="height:54px;border-radius:999px;border:none;background:var(--cyan);color:var(--ink-900);font-weight:800;font-size:16px">开始转换</button>
+      </div>
+    </div></div>
+
+  </div>
+</section>
+
+<!-- ===================== 3. 桌面端 ===================== -->
+<section>
+  <h2 class="section-title">桌面端（Windows / macOS / Linux）</h2>
+  <p class="section-sub">不沿用 macOS 音乐 App 的顶部 LCD：播放条在底部、全宽声波进度；右侧常驻“原文”面板；左侧导航按“文章状态”而不是“专辑/歌曲”组织。</p>
+  <div style="width:1440px;max-width:100%;height:900px;border-radius:14px;overflow:hidden;background:var(--ink-900);box-shadow:0 0 0 1px #262d42,0 40px 80px rgba(0,0,0,.5);display:flex;flex-direction:column">
+    <div style="flex:1;min-height:0;display:flex">
+      <!-- 侧边栏 -->
+      <aside style="width:248px;flex-shrink:0;background:var(--ink-800);box-shadow:inset -1px 0 0 var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:22px">
+        <div class="row" style="gap:10px;padding:0 6px">
+          <div style="width:30px;height:30px;border-radius:9px;background:var(--cyan);display:flex;align-items:center;justify-content:center;gap:2px"><i style="width:3px;height:8px;border-radius:2px;background:var(--ink-900)"></i><i style="width:3px;height:15px;border-radius:2px;background:var(--ink-900)"></i><i style="width:3px;height:20px;border-radius:2px;background:var(--ink-900)"></i><i style="width:3px;height:12px;border-radius:2px;background:var(--ink-900)"></i><i style="width:3px;height:7px;border-radius:2px;background:var(--ink-900)"></i></div>
+          <span style="font-family:var(--display);font-weight:700;font-size:17px">English Speaker</span>
+        </div>
+        <label class="row" style="gap:8px;height:38px;padding:0 12px;border-radius:12px;background:var(--ink-700);color:var(--text-2);font-size:14px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input placeholder="搜索文章与原文" style="flex:1;border:none;background:transparent;color:var(--text-1);font-family:var(--ui);font-size:14px;outline:none">
+        </label>
+        <nav style="display:flex;flex-direction:column;gap:2px">
+          <a href="#" class="row" style="gap:10px;height:38px;padding:0 12px;border-radius:10px;color:var(--text-2);text-decoration:none;font-size:14px;font-weight:700">首页</a>
+          <a href="#" class="row" style="gap:10px;height:38px;padding:0 12px;border-radius:10px;background:var(--cyan-bg);color:var(--cyan-lt);text-decoration:none;font-size:14px;font-weight:800;justify-content:space-between">全部文章<span>5</span></a>
+          <a href="#" class="row" style="gap:10px;height:38px;padding:0 12px;border-radius:10px;color:var(--text-2);text-decoration:none;font-size:14px;font-weight:700;justify-content:space-between">转换中<span>1</span></a>
+          <a href="#" class="row" style="gap:10px;height:38px;padding:0 12px;border-radius:10px;color:var(--text-2);text-decoration:none;font-size:14px;font-weight:700;justify-content:space-between">已保存<span>2</span></a>
+          <a href="#" class="row" style="gap:10px;height:38px;padding:0 12px;border-radius:10px;color:var(--text-2);text-decoration:none;font-size:14px;font-weight:700">未转换</a>
+        </nav>
+        <div style="margin-top:auto;padding:14px;border-radius:14px;background:var(--ink-700)">
+          <div class="row" style="justify-content:space-between;font-size:12px;font-weight:700;color:var(--text-2)"><span>本地缓存</span><span>4.8 MB / 1 GB</span></div>
+          <div style="height:4px;border-radius:2px;background:var(--line-2);margin-top:8px"><div style="width:6%;height:4px;border-radius:2px;background:var(--cyan)"></div></div>
+        </div>
+      </aside>
+      <!-- 主区 -->
+      <div style="flex:1;min-width:0;padding:28px 32px;display:flex;flex-direction:column;gap:20px;overflow:hidden">
+        <div class="row" style="justify-content:space-between">
+          <h1 style="margin:0;font-family:var(--display);font-weight:700;font-size:32px;letter-spacing:-.02em">全部文章</h1>
+          <button style="height:40px;padding:0 18px;border-radius:999px;border:none;background:var(--cyan);color:var(--ink-900);font-weight:800;font-size:14px;display:flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>导入文章</button>
+        </div>
+        <div id="deskTable"></div>
+      </div>
+      <!-- 原文面板 -->
+      <aside style="width:440px;flex-shrink:0;background:var(--ink-800);box-shadow:inset 1px 0 0 var(--line);padding:24px 26px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+        <div class="row" style="justify-content:space-between">
+          <div class="label">原文 · 第 4 / 9 句</div>
+          <button class="chip violet" style="height:30px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 8c2.5 4 6 4 8 0s5.5-4 8 0"/></svg>跟读标注</button>
+        </div>
+        <div class="tx" style="font-size:18px;line-height:28px;color:var(--text-3);font-weight:700">Most of us spend far too much time sitting down.</div>
+        <div class="tx" style="font-size:18px;line-height:28px;color:var(--text-3);font-weight:700">We sit at our desks, we sit in the car, and then we sit on the sofa.</div>
+        <div style="padding:16px;border-radius:18px;background:rgba(24,32,56,.9);box-shadow:inset 0 0 0 1px rgba(51,225,200,.18)">
+          <div class="tx" style="font-size:24px;line-height:38px">
+            <span class="read">Doctors</span> <span class="read">say</span> <span class="weak read">that</span> <span class="weak read">a</span> <span class="read">short</span> <span class="now">walk</span><span class="lk">‿</span><span class="up">after</span> <span class="up">each</span> <span class="up">meal</span><span class="lk">‿</span><span class="up">is</span> <span class="up">one</span><span class="lk">‿</span><span class="weak">of</span> <span class="weak">the</span> <span class="up">easiest</span> <span class="up">ways</span> <span class="weak">to</span> <span class="up">stay</span> <span class="up">healthy.</span>
+          </div>
+        </div>
+        <div class="tx" style="font-size:18px;line-height:28px;color:var(--text-3);font-weight:700">It helps your heart, it clears your head, and it does not cost a thing.</div>
+        <div class="tx" style="font-size:18px;line-height:28px;color:#3C4560;font-weight:700">Did you know that walking can also make you more creative?</div>
+      </aside>
+    </div>
+    <!-- 底部播放条 -->
+    <div style="height:96px;flex-shrink:0;background:var(--ink-700);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);display:grid;grid-template-columns:300px 1fr 300px;align-items:center;padding:0 24px;gap:24px">
+      <div class="row" style="gap:12px;min-width:0">
+        <div class="cover" style="width:56px;height:56px;border-radius:12px;padding:0 8px;background:var(--ink-800)"><div class="wave" data-seed="Why We Should Walk More" data-n="8" data-min="6" data-max="36" data-color="#33E1C8" style="height:36px;width:100%"></div></div>
+        <div style="min-width:0">
+          <div style="font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Why We Should Walk More</div>
+          <div style="font-size:13px;color:var(--text-2)">Heart · 美音</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div class="row" style="justify-content:center;gap:14px">
+          <button class="icon-btn" aria-label="单句循环" style="color:var(--text-2)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l3 3-3 3"/><path d="M4 11V9a3 3 0 0 1 3-3h13"/><path d="M7 21l-3-3 3-3"/><path d="M20 13v2a3 3 0 0 1-3 3H4"/></svg></button>
+          <button class="icon-btn" aria-label="上一句"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5v14"/><path d="M19 6v12l-9-6z"/></svg></button>
+          <button class="play" style="width:46px;height:46px;box-shadow:none" aria-label="暂停"><svg width="20" height="20" viewBox="0 0 24 24" fill="#090C16"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
+          <button class="icon-btn" aria-label="下一句"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5v14"/><path d="M5 6v12l9-6z"/></svg></button>
+          <button class="chip neutral" style="height:32px;background:var(--ink-600)">1.0×</button>
+        </div>
+        <div class="row" style="gap:12px;font-size:12px;font-weight:700;color:var(--text-2)">
+          <span>1:02</span>
+          <div class="wave bottom" data-seed="desk" data-n="110" data-min="3" data-max="18" data-played="46" data-buffered="80" style="height:18px;flex:1;gap:2px"></div>
+          <span>-2:41</span>
+        </div>
+      </div>
+      <div class="row" style="justify-content:flex-end;gap:10px">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A3ABC2" stroke-width="1.75" stroke-linecap="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+        <div style="width:110px;height:4px;border-radius:2px;background:var(--line-2)"><div style="width:70%;height:4px;border-radius:2px;background:var(--text-1)"></div></div>
+        <button class="icon-btn" aria-label="待播清单"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 6h11M4 12h11M4 18h7M18 14v6M15 17h6"/></svg></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+// 声纹/声波：由字符串确定性生成（FNV-1a + LCG），三端可用同一算法
+function seedOf(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h;}
+function bars(seed,n,min,max){let x=seed||1;const out=[];for(let i=0;i<n;i++){x=(Math.imul(x,1103515245)+12345)>>>0;const r=(x>>>8)/16777216;const env=Math.sin(Math.PI*(i+.5)/n);out.push(Math.round(min+(max-min)*Math.min(1,.3*r+.7*r*env+.15*env)));}return out;}
+document.querySelectorAll('.wave').forEach(el=>{
+  const d=el.dataset,n=+d.n,hs=bars(seedOf(d.seed),n,+d.min,+d.max);
+  const played=d.played!=null?+d.played:-1,buffered=d.buffered!=null?+d.buffered:n;
+  hs.forEach((h,i)=>{const b=document.createElement('i');b.style.height=h+'px';
+    b.style.background=d.color?d.color:(i<played?'#33E1C8':(i<buffered?(d.dim||'#4A5372'):'rgba(255,255,255,.10)'));el.appendChild(b);});
+});
+
+// 色板
+const sw=[['Ink 900','#090C16','底色'],['Ink 800','#10152A','面板'],['Ink 700','#182038','卡片'],['Ink 600','#222B47','控件'],
+['Text 1','#F1F4FB','主文字'],['Text 2','#A3ABC2','次文字'],['Text 3','#7F89A6','弱读/辅助'],['Line','#262E48','分隔'],
+['信号青','#33E1C8','播放/当前'],['青 · 浅','#7CF0DD','青上文字'],['紫外紫','#9D8CFF','发音标注'],['紫 · 浅','#C3B9FF','紫上文字']];
+document.getElementById('swatches').innerHTML=sw.map(([n,h,u])=>`<div style="display:flex;flex-direction:column;gap:8px"><div style="height:64px;border-radius:12px;background:${h};box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)"></div><div><div style="font-size:13px;font-weight:700">${n}</div><div style="font-size:12px;color:var(--text-2)">${h} · ${u}</div></div></div>`).join('');
+
+// 图标
+const ic=[['首页','<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'],
+['资料库','<path d="M5 4h4v16H5zM11 4h4v16h-4z"/><path d="m17 5 3.5.8-3 14.6-3.5-.8"/>'],
+['搜索','<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'],['导入','<path d="M12 5v14M5 12h14"/>'],
+['播放','<path d="M7 4.5v15l12-7.5z"/>'],['上一句','<path d="M5 5v14"/><path d="M19 6v12l-9-6z"/>'],['下一句','<path d="M19 5v14"/><path d="M5 6v12l9-6z"/>'],
+['单句循环','<path d="M17 3l3 3-3 3"/><path d="M4 11V9a3 3 0 0 1 3-3h13"/><path d="M7 21l-3-3 3-3"/><path d="M20 13v2a3 3 0 0 1-3 3H4"/><path d="M11.5 10.5 13 9.5v5"/>'],
+['倍速','<path d="M3.5 18a9 9 0 1 1 17 0"/><path d="m12 14 4-5"/>'],['跟读标注','<path d="M4 8c2.5 4 6 4 8 0s5.5-4 8 0"/><path d="M4 16h16" stroke-dasharray="1 3"/>'],
+['待播','<path d="M4 6h11M4 12h11M4 18h7M18 14v6M15 17h6"/>'],['保存','<path d="M6 3.5h12v17l-6-4-6 4z"/>'],
+['转换','<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/>'],['音色','<circle cx="9" cy="8" r="4"/><path d="M3 20c.8-3.5 3.2-5 6-5s5.2 1.5 6 5"/><path d="M17.5 6.5a4 4 0 0 1 0 5"/><path d="M20 4a7.5 7.5 0 0 1 0 10"/>']];
+document.getElementById('icons').innerHTML=ic.map(([n,p])=>`<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 0;border-radius:14px;background:var(--ink-800)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F1F4FB" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg><div style="font-size:12px;color:var(--text-2)">${n}</div></div>`).join('');
+
+// 资料库列表（移动端）
+const rows=[
+  {t:'How Coffee Travelled the World',m:'6 分钟 · Heart 美音',c:'#9D8CFF',s:'<span class="chip cyan" style="height:22px;font-size:12px;padding:0 8px"><span class="mini-prog" style="width:22px"><b style="width:10px"></b></span>4/9</span>'},
+  {t:'Pick It Up: Everyday Phrasal Verbs',m:'3 分钟 · Emma 英音',c:'#33E1C8',s:'<span style="display:inline-flex;align-items:center;gap:4px;color:var(--cyan-lt);font-weight:700;font-size:12px"><svg width="12" height="12" viewBox="0 0 24 24" fill="#33E1C8"><path d="M6 3.5h12v17l-6-4-6 4z"/></svg>已保存</span>'},
+  {t:'Why We Learn Better by Listening',m:'5 分钟 · Michael 美音',c:'#7CF0DD',s:''},
+  {t:'A Note on Sleep',m:'约 4 分钟',c:'#9D8CFF',s:'<span class="chip ghost" style="height:22px;font-size:12px;padding:0 8px">未转换</span>'}];
+const thumb=(t,c,sz,n)=>`<div class="cover" style="width:${sz}px;height:${sz}px;border-radius:12px;padding:0 8px"><div class="wave" style="height:${sz-18}px;width:100%">${bars(seedOf(t),n,6,sz-18).map(h=>`<i style="height:${h}px;background:${c}"></i>`).join('')}</div></div>`;
+document.getElementById('libRows').innerHTML=rows.map(r=>`<div class="row" style="gap:14px;padding:12px 0;box-shadow:inset 0 -1px 0 var(--line)">${thumb(r.t,r.c,56,9)}<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:15px;line-height:20px">${r.t}</div><div class="row" style="gap:8px;margin-top:6px;font-size:13px;color:var(--text-2)"><span>${r.m}</span>${r.s}</div></div><button class="icon-btn" aria-label="更多操作"><svg width="20" height="20" viewBox="0 0 24 24" fill="#A3ABC2"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button></div>`).join('');
+
+// 桌面端表格
+const drows=[
+  {t:'Why We Should Walk More',m:'Heart · 美音',d:'4:12',c:'#33E1C8',s:'<span class="chip cyan" style="height:24px;font-size:12px">正在播放</span>',now:true},
+  {t:'How Coffee Travelled the World',m:'Heart · 美音',d:'约 6:00',c:'#9D8CFF',s:'<span class="chip cyan" style="height:24px;font-size:12px"><span class="mini-prog" style="width:22px"><b style="width:10px"></b></span>转换中 4/9</span>'},
+  {t:'Pick It Up: Everyday Phrasal Verbs',m:'Emma · 英音',d:'3:05',c:'#33E1C8',s:'<span class="chip neutral" style="height:24px;font-size:12px"><svg width="12" height="12" viewBox="0 0 24 24" fill="#33E1C8"><path d="M6 3.5h12v17l-6-4-6 4z"/></svg>已保存</span>'},
+  {t:'Why We Learn Better by Listening',m:'Michael · 美音',d:'5:20',c:'#7CF0DD',s:''},
+  {t:'A Note on Sleep',m:'—',d:'约 4:00',c:'#9D8CFF',s:'<span class="chip ghost" style="height:24px;font-size:12px">未转换</span>'}];
+document.getElementById('deskTable').innerHTML=`<div style="display:grid;grid-template-columns:56px 1fr 160px 90px 150px;gap:16px;padding:0 12px 10px;font-size:12px;font-weight:800;letter-spacing:.06em;color:var(--text-2);box-shadow:inset 0 -1px 0 var(--line)"><span></span><span>标题</span><span>音色</span><span>时长</span><span>状态</span></div>`+
+drows.map(r=>`<div style="display:grid;grid-template-columns:56px 1fr 160px 90px 150px;gap:16px;align-items:center;padding:10px 12px;border-radius:14px;${r.now?'background:rgba(51,225,200,.08);':''}"><div>${thumb(r.t,r.c,48,7)}</div><span style="font-weight:700;font-size:15px;${r.now?'color:var(--cyan-lt)':''}">${r.t}</span><span style="font-size:14px;color:var(--text-2)">${r.m}</span><span style="font-size:14px;color:var(--text-2)">${r.d}</span><span>${r.s}</span></div>`).join('');
+</script>
+</body>
+</html>

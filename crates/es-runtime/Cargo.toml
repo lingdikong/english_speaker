@@ -1,0 +1,12 @@
+[package]
+name = "es-runtime"
+description = "Composition root: wires concrete adapters into es-core AppCore. Shared by FFI and desktop."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+es-core.workspace = true
+es-audio.workspace = true
+es-storage.workspace = true
+es-tts-kokoro.workspace = true
+log.workspace = true

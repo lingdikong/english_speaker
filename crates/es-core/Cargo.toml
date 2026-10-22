@@ -1,0 +1,13 @@
+[package]
+name = "es-core"
+description = "Platform-agnostic core: domain model, text pipeline, synthesis orchestration, playback engine."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+log.workspace = true
+crossbeam-channel.workspace = true

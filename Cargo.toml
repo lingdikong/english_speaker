@@ -1,0 +1,40 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.86"
+
+[workspace.dependencies]
+es-core = { path = "crates/es-core" }
+es-audio = { path = "crates/es-audio" }
+es-storage = { path = "crates/es-storage" }
+es-tts-kokoro = { path = "crates/es-tts-kokoro" }
+es-runtime = { path = "crates/es-runtime" }
+
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+log = "0.4"
+crossbeam-channel = "0.5"
+rusqlite = { version = "0.40", features = ["bundled"] }
+uniffi = "0.32"
+cpal = "0.18"
+ort = "=2.0.0-rc.15"
+# 桌面端 Chromium 宿主（tauri-apps/cef-rs）；版本号 = CEF 版本，升级时一并更新 bundle 脚本
+cef = { version = "=154.5.0", default-features = false }
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+# 过程宏与构建脚本不能 strip（否则 rustc 无法加载过程宏 dylib）
+[profile.release.build-override]
+strip = "none"

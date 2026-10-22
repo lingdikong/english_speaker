@@ -1,0 +1,6 @@
+[bindings.swift]
+module_name = "SpeakerCore"
+ffi_module_name = "SpeakerCoreFFI"
+
+[bindings.kotlin]
+package_name = "app.englishspeaker.core"

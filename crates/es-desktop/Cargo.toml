@@ -1,0 +1,44 @@
+[package]
+name = "es-desktop"
+description = "Desktop host (Windows / macOS / Linux): CEF (Chromium) window + Web UI, JSON bridge, cpal audio output, dev CLI."
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = []
+# CEF（Chromium Embedded Framework）窗口宿主。首次构建会下载 CEF 二进制（约 130 MB，解压后约 600 MB），
+# 因此默认关闭：`cargo build -p es-desktop --features cef`。未开启时 `es-desktop app` 退回开发宿主（Chrome --app）。
+cef = ["dep:cef", "dep:objc2", "dep:objc2-app-kit", "dep:objc2-foundation"]
+
+[dependencies]
+es-runtime.workspace = true
+es-tts-kokoro.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+cpal.workspace = true
+# 不启用 cef 的 sandbox 特性：宿主进程以 no_sandbox 运行（页面只加载本地打包的 UI）
+cef = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { workspace = true, optional = true }
+objc2-foundation = { workspace = true, optional = true, features = ["NSString", "NSThread"] }
+objc2-app-kit = { workspace = true, optional = true, features = [
+    "NSApplication",
+    "NSEvent",
+    "NSMenu",
+    "NSMenuItem",
+    "NSResponder",
+    "NSRunningApplication",
+] }
+
+# macOS：CEF 子进程（渲染/GPU/网络…）需要放在 .app/Contents/Frameworks/*Helper.app 中的独立可执行文件。
+# Windows / Linux 直接复用主程序（main 中按 --type= 分流）。
+[[bin]]
+name = "es-desktop-helper"
+path = "src/bin/es-desktop-helper.rs"
+required-features = ["cef"]
+
+[[bin]]
+name = "es-desktop"
+path = "src/main.rs"

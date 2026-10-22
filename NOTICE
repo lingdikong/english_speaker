@@ -1,0 +1,13 @@
+English Speaker
+Copyright 2026 lingdikong
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product bundles third-party components:
+
+- Kokoro-82M model weights and voices (hexgrad), ONNX export by onnx-community
+  Licensed under the Apache License, Version 2.0 — see models/kokoro/README.md
+- misaki English G2P dictionaries (hexgrad), Apache License, Version 2.0
+- Space Grotesk, Manrope, Noto Sans fonts, SIL Open Font License 1.1
+
+See ACKNOWLEDGEMENTS.md for the full list of third-party software and credits.

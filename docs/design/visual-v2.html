@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>English Speaker 视觉设计 v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@500;600;700&family=Noto+Sans:wght@400;500&display=swap">
+<style>
+/* ================= 主题令牌 =================
+   夜间：低饱和石墨底（少蓝光），正文对比约 13:1（不刺眼、不晕光）
+   白天：柔灰底（不反光），深墨正文约 14:1；品牌色加深以保证小字 ≥4.5:1 */
+.t-dark{
+  --bg:#11141C; --surface:#171B26; --card:#1E2330; --control:#282E3D; --line:#262C3A;
+  --t1:#D8DCE5; --t2:#A3AABA; --t3:#868E9F;
+  --accent:#3CCFB9; --accent-ink:#0E1A18; --accent-text:#5FD9C6; --accent-soft:rgba(60,207,185,.14);
+  --violet:#A196F2; --violet-text:#B7AEF6; --violet-soft:rgba(161,150,242,.14);
+  --wave-b:#4A5163; --wave-e:#262B37;
+  --other:rgba(216,220,229,.55); --pending:rgba(216,220,229,.28);
+  --danger-text:#F2A7A7; --danger-soft:rgba(242,167,167,.12);
+  --elev:0 10px 30px rgba(0,0,0,.45); --frame:#1B1F2A; --frame-edge:#2C3242;
+  --glass:rgba(34,39,52,.30); --glass-hi:rgba(255,255,255,.10); --glass-edge:rgba(255,255,255,.07); --glass-shadow:0 14px 44px rgba(0,0,0,.50);
+  color-scheme:dark;
+}
+.t-light{
+  --bg:#F3F4F6; --surface:#FAFAFB; --card:#FFFFFF; --control:#E7E9EE; --line:#E2E5EA;
+  --t1:#1E232E; --t2:#555D6D; --t3:#666E7E;
+  --accent:#0E9483; --accent-ink:#FFFFFF; --accent-text:#08786A; --accent-soft:rgba(14,148,131,.12);
+  --violet:#6A57D6; --violet-text:#5A47C8; --violet-soft:rgba(106,87,214,.10);
+  --wave-b:#BFC4CE; --wave-e:#E3E6EB;
+  --other:rgba(30,35,46,.65); --pending:rgba(30,35,46,.30);
+  --danger-text:#B42828; --danger-soft:rgba(180,40,40,.08);
+  --elev:0 10px 30px rgba(30,35,46,.12); --frame:#D9DCE2; --frame-edge:#C5C9D1;
+  --glass:rgba(255,255,255,.34); --glass-hi:rgba(255,255,255,.95); --glass-edge:rgba(30,35,46,.07); --glass-shadow:0 14px 44px rgba(30,35,46,.16);
+  color-scheme:light;
+}
+:root{--display:'Space Grotesk',sans-serif;--ui:Manrope,'PingFang SC','Noto Sans SC',sans-serif;--ipa:'Noto Sans',sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:#0B0D12;color:#D8DCE5;font-family:var(--ui);-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+.page{max-width:1840px;margin:0 auto;padding:72px 48px 120px;display:flex;flex-direction:column;gap:100px}
+h2.section-title{font-family:var(--display);font-weight:700;font-size:44px;letter-spacing:-.02em;margin:0 0 8px;color:#E4E7EE}
+.section-sub{color:#A3AABA;font-size:15px;line-height:24px;margin:0 0 36px;max-width:1100px}
+.label{font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--t2)}
+.row{display:flex;align-items:center}
+.themed{background:var(--bg);color:var(--t1)}
+.panel{background:var(--surface);border-radius:20px;box-shadow:inset 0 0 0 1px var(--line)}
+.wave{display:flex;align-items:center;gap:2px}
+.wave>i{display:block;flex:1;border-radius:2px}
+.wave.bottom{align-items:flex-end}
+svg{flex-shrink:0}
+.icon-btn{width:44px;height:44px;border-radius:999px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;color:var(--t1)}
+.icon-btn.fill{background:var(--control)}
+.play{border:none;border-radius:999px;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center}
+.chip{height:30px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;border:none;white-space:nowrap;font-family:var(--ui)}
+.chip.accent{background:var(--accent-soft);color:var(--accent-text)}
+.chip.violet{background:var(--violet-soft);color:var(--violet-text)}
+.chip.neutral{background:var(--control);color:var(--t1)}
+.chip.muted{background:var(--control);color:var(--t2)}
+.chip.ghost{background:transparent;box-shadow:inset 0 0 0 1px var(--line);color:var(--t2)}
+.chip.danger{background:var(--danger-soft);color:var(--danger-text)}
+.mini-prog{width:28px;height:3px;border-radius:2px;background:var(--wave-e);display:inline-flex}
+.mini-prog>b{display:block;height:3px;border-radius:2px;background:var(--accent)}
+.cover{background:var(--card);box-shadow:inset 0 0 0 1px var(--line);display:flex;align-items:center;justify-content:center}
+
+/* 原文与跟读标注 —— 字重 700（不用 800，避免久看发糊），夜间文字更细一点 */
+.tx{font-weight:700;letter-spacing:.003em}
+.t-dark .tx{font-weight:650}
+.tx .read{color:var(--t1)}
+.tx .up{color:var(--t2)}
+.tx .now{color:var(--accent-text);background:var(--accent-soft);border-radius:9px;padding:1px 6px}
+.tx .weak{font-size:.84em;color:var(--t3);font-weight:600}
+.tx .weak.read{color:var(--t2)}
+.tx .lk{color:var(--violet);font-weight:700}
+.tx .dot{border-bottom:2px dotted var(--violet)}
+.sent-other{color:var(--other);font-weight:600}
+.sent-pending{color:var(--pending);font-weight:600}
+
+/* 设备外框（仅展示） */
+.phones{display:grid;grid-template-columns:repeat(4,390px);gap:44px 40px}
+.phone-wrap{display:flex;flex-direction:column;gap:14px}
+.phone-name{font-size:14px;font-weight:700;color:#A3AABA;display:flex;gap:8px;align-items:center}
+.phone-name b{font-weight:700;padding:2px 8px;border-radius:999px;font-size:12px}
+.phone{width:390px;height:844px;border-radius:48px;overflow:hidden;position:relative;display:flex;flex-direction:column;box-shadow:0 0 0 10px var(--frame),0 0 0 11px var(--frame-edge),0 30px 70px rgba(0,0,0,.45)}
+.tabbar{height:80px;flex-shrink:0;background:var(--surface);box-shadow:inset 0 1px 0 var(--line);display:grid;grid-template-columns:repeat(3,1fr);padding-bottom:16px}
+.tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--t2);text-decoration:none;font-size:11px;font-weight:700}
+.tabbar a.on{color:var(--accent-text)}
+.desk{position:relative;width:1440px;max-width:100%;height:900px;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 0 0 1px var(--frame-edge),0 30px 70px rgba(0,0,0,.4)}
+table.ct{width:100%;border-collapse:collapse;font-size:13px}
+table.ct td,table.ct th{padding:8px 6px;text-align:left;border-bottom:1px solid var(--line)}
+table.ct th{color:var(--t2);font-weight:700;font-size:12px}
+.pass{font-weight:700;color:var(--accent-text)}
+.warn{font-weight:700;color:var(--danger-text)}
+/* 播放条下层内容渐隐：内容、分隔线、面板色差一起在播放条附近消失 */
+.fade-panel{background:linear-gradient(to bottom,var(--surface) calc(100% - 190px),var(--bg) calc(100% - 20px))}
+.split{position:absolute;top:0;bottom:0;width:1px;pointer-events:none;
+  background:linear-gradient(to bottom,var(--line) calc(100% - 190px),transparent calc(100% - 20px))}
+.fade-under{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 170px),rgba(0,0,0,.62) calc(100% - 76px),rgba(0,0,0,.36) calc(100% - 16px),rgba(0,0,0,.2) 100%);
+  mask-image:linear-gradient(to bottom,#000 calc(100% - 170px),rgba(0,0,0,.62) calc(100% - 76px),rgba(0,0,0,.36) calc(100% - 16px),rgba(0,0,0,.2) 100%)}
+/* 移动端：玻璃药丸（导航 / 迷你播放条）与玻璃控制面板 */
+.m-glass{position:absolute;left:0;right:0;margin:0 auto;background:var(--glass);
+  -webkit-backdrop-filter:blur(10px) saturate(180%);backdrop-filter:blur(10px) saturate(180%);
+  box-shadow:inset 0 1px 0 var(--glass-hi),inset 0 0 0 1px var(--glass-edge),var(--glass-shadow);color:var(--t1)}
+.m-tabs{bottom:26px;width:calc(100% - 32px);height:62px;border-radius:999px;display:grid;grid-template-columns:repeat(4,1fr);padding:0 7px}
+.m-tabs a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;margin:6px 1px;border-radius:999px;color:var(--t2);text-decoration:none;font-size:11px;font-weight:700}
+.m-tabs a.on{color:var(--accent-text);background:var(--accent-soft)}
+.m-mini{bottom:98px;width:calc(100% - 32px);height:58px;border-radius:999px;display:flex;align-items:center;gap:11px;padding:0 6px 0 6px}
+/* 列表：在两个药丸下方淡出，仍隐约可见 */
+.fade-m{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 240px),rgba(0,0,0,.62) calc(100% - 156px),rgba(0,0,0,.36) calc(100% - 26px),rgba(0,0,0,.2) 100%);
+  mask-image:linear-gradient(to bottom,#000 calc(100% - 240px),rgba(0,0,0,.62) calc(100% - 156px),rgba(0,0,0,.36) calc(100% - 26px),rgba(0,0,0,.2) 100%)}
+/* 播放页：原文在控制面板下方淡出 */
+.fade-mp{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 330px),rgba(0,0,0,.6) calc(100% - 250px),rgba(0,0,0,.3) calc(100% - 30px),rgba(0,0,0,.18) 100%);
+  mask-image:linear-gradient(to bottom,#000 calc(100% - 330px),rgba(0,0,0,.6) calc(100% - 250px),rgba(0,0,0,.3) calc(100% - 30px),rgba(0,0,0,.18) 100%)}
+/* 底部栏三态：A 两行 / B 导航收成左侧小球 + 播放条 / C 导航展开 + 播放条收成右侧小球 */
+.bb{position:absolute;left:0;right:0;bottom:0;height:0;--spring:cubic-bezier(.32,.72,0,1)}
+.bb-tabs,.bb-player{position:absolute;height:60px;border-radius:999px;overflow:hidden;background:var(--glass);
+  -webkit-backdrop-filter:blur(10px) saturate(180%);backdrop-filter:blur(10px) saturate(180%);
+  box-shadow:inset 0 1px 0 var(--glass-hi),inset 0 0 0 1px var(--glass-edge),var(--glass-shadow);color:var(--t1);
+  transition:left .42s var(--spring),right .42s var(--spring),bottom .42s var(--spring)}
+.bb-tabs{left:16px;right:16px;bottom:26px}
+.bb-player{left:16px;right:16px;bottom:96px}
+[data-bb="B"] .bb-tabs{right:calc(100% - 76px)}
+[data-bb="B"] .bb-player{left:86px;bottom:26px}
+[data-bb="C"] .bb-tabs{right:86px}
+[data-bb="C"] .bb-player{left:calc(100% - 76px);bottom:26px}
+.bb-tabs-full{position:absolute;inset:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:0 6px;transition:opacity .22s}
+.bb-tabs-full a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;margin:6px 1px;border-radius:999px;color:var(--t2);text-decoration:none;font-size:11px;font-weight:700;min-width:0}
+.bb-tabs-full a.on{color:var(--accent-text);background:var(--accent-soft)}
+.bb-ball{position:absolute;left:0;top:0;width:60px;height:60px;border:none;border-radius:999px;background:transparent;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .22s;color:var(--accent-text)}
+[data-bb="B"] .bb-tabs-full{opacity:0;pointer-events:none}
+[data-bb="B"] .bb-tabs .bb-ball{opacity:1;pointer-events:auto}
+.bb-pl{position:absolute;inset:0;display:flex;align-items:center;gap:11px;padding:0 6px 0 7px}
+.bb-pl-rest{flex:1;min-width:0;overflow:hidden;display:flex;align-items:center;gap:4px;transition:opacity .2s}
+[data-bb="C"] .bb-pl-rest{opacity:0}
+[data-bb="C"] .bb-player .bb-ball{opacity:1;pointer-events:auto;width:100%}
+.fade-m1{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 170px),rgba(0,0,0,.62) calc(100% - 86px),rgba(0,0,0,.36) calc(100% - 26px),rgba(0,0,0,.2) 100%);
+  mask-image:linear-gradient(to bottom,#000 calc(100% - 170px),rgba(0,0,0,.62) calc(100% - 86px),rgba(0,0,0,.36) calc(100% - 26px),rgba(0,0,0,.2) 100%)}
+.demo-scroll{scrollbar-width:none}.demo-scroll::-webkit-scrollbar{display:none}
+@media (prefers-reduced-motion: reduce){.bb-tabs,.bb-player,.bb-tabs-full,.bb-ball,.bb-pl-rest{transition:none}}
+/* 悬浮玻璃播放条：半透明 + 背景模糊 + 顶部高光 + 柔和投影 */
+/* 药丸形：圆角 = 高度的一半，两端为正半圆；相对整个窗口水平居中，宽度随窗口自适应 */
+.glassbar{position:absolute;left:0;right:0;margin:0 auto;width:min(1080px,calc(100% - 48px));bottom:16px;height:60px;border-radius:999px;background:var(--glass);
+  -webkit-backdrop-filter:blur(10px) saturate(180%);backdrop-filter:blur(10px) saturate(180%);
+  box-shadow:inset 0 1px 0 var(--glass-hi),inset 0 0 0 1px var(--glass-edge),var(--glass-shadow);
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:24px;padding:0 22px;color:var(--t1)}
+.gbtn{width:40px;height:40px;border-radius:999px;border:none;background:transparent;color:var(--t1);display:flex;align-items:center;justify-content:center}
+.gbtn:hover{background:var(--glass-edge)}
+.gbtn.dim{color:var(--t2)}
+.gbtn.on{color:var(--violet)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="page">
+
+<!-- ================= 1. 规范 ================= -->
+<section>
+  <div class="row" style="justify-content:space-between;gap:32px;margin-bottom:44px">
+    <div class="row" style="gap:16px">
+      <div style="width:56px;height:56px;border-radius:16px;background:#3CCFB9;display:flex;align-items:center;justify-content:center;gap:3px">
+        <i style="width:4px;height:14px;border-radius:2px;background:#0E1A18"></i><i style="width:4px;height:26px;border-radius:2px;background:#0E1A18"></i><i style="width:4px;height:36px;border-radius:2px;background:#0E1A18"></i><i style="width:4px;height:22px;border-radius:2px;background:#0E1A18"></i><i style="width:4px;height:12px;border-radius:2px;background:#0E1A18"></i>
+      </div>
+      <div>
+        <div style="font-family:var(--display);font-weight:700;font-size:32px;letter-spacing:-.02em;color:#E4E7EE">English Speaker</div>
+        <div style="color:#A3AABA;font-size:14px">视觉规范 v2 · 夜间 / 白天双主题 · 长时专注</div>
+      </div>
+    </div>
+    <p style="max-width:640px;margin:0;color:#A3AABA;font-size:15px;line-height:24px;text-align:right">原文是主角，声波是进度。两套主题共用同一套结构与令牌，跟随系统自动切换，也可在设置中固定。所有正文颜色在下方实时计算对比度。</p>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;margin-bottom:56px">
+    <div class="themed t-dark panel" style="padding:28px;display:flex;flex-direction:column;gap:20px">
+      <div class="row" style="justify-content:space-between"><div style="font-family:var(--display);font-weight:700;font-size:22px">夜间 · 石墨</div><span class="chip muted">跟随系统深色</span></div>
+      <div class="swatches" data-theme="t-dark" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px"></div>
+      <table class="ct" data-theme="t-dark"></table>
+    </div>
+    <div class="themed t-light panel" style="padding:28px;display:flex;flex-direction:column;gap:20px">
+      <div class="row" style="justify-content:space-between"><div style="font-family:var(--display);font-weight:700;font-size:22px">白天 · 柔灰</div><span class="chip muted">跟随系统浅色</span></div>
+      <div class="swatches" data-theme="t-light" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px"></div>
+      <table class="ct" data-theme="t-light"></table>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:18px;margin-bottom:56px">
+    <div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#A3AABA">视觉工效 · 久看不累、能专注的十条规则</div>
+    <div id="rules" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px"></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px">
+    <div class="themed t-dark panel" style="padding:28px;display:flex;flex-direction:column;gap:18px">
+      <div class="label">阅读排版 + 跟读标注 · 夜间</div>
+      <div class="legend"></div>
+    </div>
+    <div class="themed t-light panel" style="padding:28px;display:flex;flex-direction:column;gap:18px">
+      <div class="label">阅读排版 + 跟读标注 · 白天</div>
+      <div class="legend"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 2. 移动端 ================= -->
+<section>
+  <h2 class="section-title">移动端（iOS / Android）</h2>
+  <p class="section-sub">每个关键页面都给出夜间与白天两版。底部导航（首页 / 资料库 / 搜索 / 设置）与迷你播放条为居中的玻璃药丸，列表在其下淡出并隐约可见；播放页控制区保留完整面板（同心圆角的玻璃面板），原文在其下淡出。播放页的当前句固定在屏幕约 35% 高度（视线不移动，文字滚动）；专注模式在 5 秒无操作后收起次要控件；阅读设置提供字号、行距、主题与“非当前句亮度”。</p>
+  <div class="phones" id="phones"></div>
+</section>
+
+<!-- ================= 3. 桌面端 ================= -->
+<section>
+  <h2 class="section-title">桌面端（Windows / macOS / Linux）</h2>
+  <p class="section-sub">底部为居中的药丸形悬浮玻璃播放条，位于最上层；其下方的列表与原文向下逐渐淡出消失。左侧导航含“设置”（本地缓存等在设置中）。播放条：左侧单句循环 / 上一句 / 播放 / 下一句 / 倍速，中间封面 + 标题 + 声波进度，右侧原文 / 待播 / 跟读标注 / 音量。右侧原文面板行宽约 60 个字符；两套主题同结构。</p>
+  <div style="display:flex;flex-direction:column;gap:48px">
+    <div><div class="phone-name" style="margin-bottom:14px">主窗口 <b style="background:#1E2330;color:#D8DCE5">夜间</b></div><div class="desk themed t-dark" data-screen="desktop"></div></div>
+    <div><div class="phone-name" style="margin-bottom:14px">主窗口 <b style="background:#E7E9EE;color:#1E232E">白天</b></div><div class="desk themed t-light" data-screen="desktop"></div></div>
+  </div>
+</section>
+
+</main>
+
+<script>
+/* ---------- 工具：确定性声纹 ---------- */
+function seedOf(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h;}
+function bars(seed,n,min,max){let x=seed||1;const o=[];for(let i=0;i<n;i++){x=(Math.imul(x,1103515245)+12345)>>>0;const r=(x>>>8)/16777216;const e=Math.sin(Math.PI*(i+.5)/n);o.push(Math.round(min+(max-min)*Math.min(1,.3*r+.7*r*e+.15*e)));}return o;}
+function wave(seed,n,min,max,opt={}){const hs=bars(seedOf(seed),n,min,max);
+  return `<div class="wave ${opt.bottom?'bottom':''}" style="height:${max}px;${opt.gap!=null?'gap:'+opt.gap+'px;':''}${opt.style||''}">`+
+  hs.map((h,i)=>`<i style="height:${h}px;background:${opt.color||(i<(opt.played??-1)?'var(--accent)':(i<(opt.buffered??n)?'var(--wave-b)':'var(--wave-e)'))}"></i>`).join('')+'</div>';}
+const thumb=(t,sz,n,c)=>`<div class="cover" style="width:${sz}px;height:${sz}px;border-radius:${Math.round(sz/4.5)}px;padding:0 ${Math.round(sz/7)}px;flex-shrink:0">${wave(t,n,Math.round(sz/10),sz-Math.round(sz/2.6),{color:c,style:'width:100%'})}</div>`;
+
+/* ---------- 图标 ---------- */
+const P={
+ home:'<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+ lib:'<path d="M5 4h4v16H5zM11 4h4v16h-4z"/><path d="m17 5 3.5.8-3 14.6-3.5-.8"/>',
+ search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ prev:'<path d="M5 5v14"/><path d="M19 6v12l-9-6z"/>', next:'<path d="M19 5v14"/><path d="M5 6v12l9-6z"/>',
+ loop:'<path d="M17 3l3 3-3 3"/><path d="M4 11V9a3 3 0 0 1 3-3h13"/><path d="M7 21l-3-3 3-3"/><path d="M20 13v2a3 3 0 0 1-3 3H4"/><path d="M11.5 10.5 13 9.5v5"/>',
+ queue:'<path d="M4 6h11M4 12h11M4 18h7M18 14v6M15 17h6"/>', down:'<path d="m6 9 6 6 6-6"/>', close:'<path d="M6 6l12 12M18 6 6 18"/>',
+ annot:'<path d="M4 8c2.5 4 6 4 8 0s5.5-4 8 0"/>', vol:'<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/>',
+ textsize:'<path d="M4 18 9 6l5 12M5.8 14h6.4"/><path d="M15 18l3-7 3 7M16 16h4"/>', sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+ wave:'<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/>', bookmark:'<path d="M6 3.5h12v17l-6-4-6 4z"/>',
+ cloud:'<path d="M7 18a4.5 4.5 0 0 1-.5-9 6 6 0 0 1 11.5 1.5A3.8 3.8 0 0 1 17.5 18z"/><path d="M12 11v5M9.8 14l2.2 2 2.2-2"/>',
+ moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'};
+const I=(k,s=22,w=1.75,extra='')=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${P[k]}</svg>`;
+const PLAY=(s)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>`;
+const PAUSE=(s)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>`;
+const G={
+ prev:'<svg width="25" height="25" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M11.5 6.8v10.4L4 12z"/><path d="M20 6.8v10.4L12.5 12z"/></svg>',
+ next:'<svg width="25" height="25" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.8v10.4l7.5-5.2z"/><path d="M12.5 6.8v10.4l7.5-5.2z"/></svg>',
+ play:'<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.8v14.4L19 12z"/></svg>',
+ pause:'<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5.5" y="4.5" width="4.5" height="15" rx="1.4"/><rect x="14" y="4.5" width="4.5" height="15" rx="1.4"/></svg>',
+ loop:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3.5l3 3-3 3"/><path d="M4 11.5V10a3.5 3.5 0 0 1 3.5-3.5H20"/><path d="M7 20.5l-3-3 3-3"/><path d="M20 12.5V14a3.5 3.5 0 0 1-3.5 3.5H4"/><path d="M11.3 10.6 12.8 9.6v4.8"/></svg>',
+ lyrics:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 4.5h15a1.5 1.5 0 0 1 1.5 1.5v9.5a1.5 1.5 0 0 1-1.5 1.5H12l-4.5 3.5V17h-3A1.5 1.5 0 0 1 3 15.5V6a1.5 1.5 0 0 1 1.5-1.5z"/><circle cx="9" cy="10" r="1.3" fill="currentColor" stroke="none"/><path d="M10.3 10.2c0 1.5-.7 2.5-1.9 2.9" stroke-width="1.6" stroke-linecap="round"/><circle cx="14.6" cy="10" r="1.3" fill="currentColor" stroke="none"/><path d="M15.9 10.2c0 1.5-.7 2.5-1.9 2.9" stroke-width="1.6" stroke-linecap="round"/></svg>',
+ queue:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="4.5" cy="6.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="4.5" cy="17.5" r="1.4" fill="currentColor" stroke="none"/><path d="M9 6.5h11M9 12h11M9 17.5h11"/></svg>',
+ annot:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true"><path d="M3.5 9.5c2.6 4.4 6 4.4 8.5 0s5.9-4.4 8.5 0"/><path d="M5 17h14" stroke-dasharray="0.5 3.5"/></svg>',
+ vol:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><path d="M3.5 9.3h3.2l5-4.3v14l-5-4.3H3.5z" fill="currentColor" stroke-linejoin="round" stroke-width="1.2"/><path d="M15.3 9a4.2 4.2 0 0 1 0 6"/><path d="M18.3 6.3a8 8 0 0 1 0 11.4"/></svg>'};
+const MORE=`<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>`;
+const SAVED=(s=14)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="var(--accent)" aria-hidden="true"><path d="M6 3.5h12v17l-6-4-6 4z"/></svg>`;
+
+/* ---------- 原文片段 ---------- */
+const CUR=`<span class="read">Doctors</span> <span class="read">say</span> <span class="weak read">that</span> <span class="weak read">a</span> <span class="read">short</span> <span class="now">walk</span><span class="lk">‿</span><span class="up">after</span> <span class="up">each</span> <span class="up">meal</span><span class="lk">‿</span><span class="up">is</span> <span class="up">one</span><span class="lk">‿</span><span class="weak">of</span> <span class="weak">the</span> <span class="up">easiest</span> <span class="up">ways</span> <span class="weak">to</span> <span class="up">stay</span> <span class="up">healthy.</span>`;
+const CUR_PLAIN=`<span class="read">Doctors say that a short</span> <span class="now">walk</span> <span class="up">after each meal is one of the easiest ways to stay healthy.</span>`;
+
+/* ---------- 规范：色板、对比度、规则、图例 ---------- */
+const TOK=[['--bg','底色'],['--surface','面板'],['--card','卡片'],['--control','控件'],['--line','分隔'],['--t1','主文字'],['--t2','次文字'],['--t3','弱读'],['--accent','品牌·青'],['--accent-text','青·文字'],['--violet','发音·紫'],['--violet-text','紫·文字']];
+function hex(c){c=c.trim();if(c.startsWith('rgba')){return null}return c}
+function rgbOf(str){const m=str.match(/rgba?\(([^)]+)\)/);if(m){const p=m[1].split(',').map(Number);return{r:p[0],g:p[1],b:p[2],a:p[3]??1}}const h=str.replace('#','');return{r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16),a:1}}
+function blend(fg,bg){return{r:fg.r*fg.a+bg.r*(1-fg.a),g:fg.g*fg.a+bg.g*(1-fg.a),b:fg.b*fg.a+bg.b*(1-fg.a),a:1}}
+function lum(c){const f=v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)};return .2126*f(c.r)+.7152*f(c.g)+.0722*f(c.b)}
+function ratio(a,b){const l1=lum(a),l2=lum(b);return (Math.max(l1,l2)+.05)/(Math.min(l1,l2)+.05)}
+document.querySelectorAll('.swatches').forEach(el=>{const cs=getComputedStyle(el);
+  el.innerHTML=TOK.map(([v,n])=>{const val=cs.getPropertyValue(v).trim();return `<div style="display:flex;flex-direction:column;gap:6px"><div style="height:48px;border-radius:10px;background:${val};box-shadow:inset 0 0 0 1px var(--line)"></div><div style="font-size:12px;font-weight:700">${n}</div><div style="font-size:11px;color:var(--t2)">${val.toUpperCase()}</div></div>`}).join('');});
+const PAIRS=[['正文（主文字 / 底色）','--t1','--bg','7–14',7],['次要文字','--t2','--bg','≥4.5',4.5],['弱读词','--t3','--bg','≥4.5',4.5],['非当前句（大号）','--other','--bg','≥3（大字）',3],
+['当前词（青字 / 青底）','--accent-text','--accent-soft@--card','≥4.5',4.5],['标注说明文字（紫）','--violet-text','--bg','≥4.5',4.5],['播放键图标','--accent-ink','--accent','≥3（图形）',3],['未转换句（装饰）','--pending','--bg','不要求',0]];
+document.querySelectorAll('table.ct').forEach(t=>{const cs=getComputedStyle(t);const g=v=>rgbOf(cs.getPropertyValue(v).trim());
+  t.innerHTML='<tr><th>用途</th><th>对比度</th><th>目标</th><th></th></tr>'+PAIRS.map(([name,fg,bg,target,min])=>{
+    let bgc;if(bg.includes('@')){const [a,b]=bg.split('@');bgc=blend(g(a),g(b))}else bgc=g(bg);
+    const fgc=blend(g(fg),bgc);const r=ratio(fgc,bgc);
+    const tooHigh=fg==='--t1'&&r>15;const ok=min===0||(r>=min&&!tooHigh);
+    return `<tr><td>${name}</td><td style="font-weight:700">${r.toFixed(1)}:1</td><td style="color:var(--t2)">${target}</td><td class="${ok?'pass':'warn'}">${min===0?'—':(ok?'通过':'不通过')}</td></tr>`}).join('');});
+const RULES=[
+ ['对比度有上下限','正文 7–14:1：低于 7 久读吃力，高于 15 夜间会“晕光”。所以不用纯黑底、纯白字。'],
+ ['夜间去蓝','夜间底色用低饱和石墨灰而不是深蓝；白天用柔灰而不是纯白，减少眩光。'],
+ ['品牌色只点不铺','信号青只出现在播放键、当前词、进度三处，合计不到画面 5%；其余全是中性色。'],
+ ['视线不动，文字动','当前句固定停在屏幕约 35% 高度，换句时文字平滑上移，眼睛不用追。'],
+ ['上下文可读不抢戏','非当前句保留 55–65% 亮度：能顺着读，但不和当前句竞争注意力。'],
+ ['舒适行长与行高','原文每行约 35–60 个字符，行高 1.5–1.6；当前句 24px，其它句 19px。'],
+ ['字重适中','原文用 700（不用 800），夜间降到 650，浅字在深底上会显得更粗、更糊。'],
+ ['没有常驻动效','不用流动背景；高亮与滚动过渡 200–300ms；跟随系统“减少动态效果”。'],
+ ['专注模式','播放 5 秒无操作，自动收起次要控件，只留原文与声波；轻点任意处恢复。'],
+ ['不只靠颜色','当前词 = 底色胶囊，连读 = 弧线，弱读 = 小一号，点线 = 音变；色弱也能分辨。']];
+document.getElementById('rules').innerHTML=RULES.map(([t,d],i)=>`<div style="padding:18px;border-radius:16px;background:#171B26;box-shadow:inset 0 0 0 1px #262C3A;display:flex;flex-direction:column;gap:8px"><div style="font-size:12px;font-weight:700;color:#5FD9C6">${String(i+1).padStart(2,'0')}</div><div style="font-weight:700;font-size:15px;color:#D8DCE5">${t}</div><div style="font-size:13px;line-height:21px;color:#A3AABA">${d}</div></div>`).join('');
+document.querySelectorAll('.legend').forEach(el=>{el.innerHTML=`
+  <div class="tx sent-other" style="font-size:19px;line-height:30px">We sit at our desks, we sit in the car, and then we sit on the sofa.</div>
+  <div style="padding:16px 18px;border-radius:18px;background:var(--card);box-shadow:inset 0 0 0 1px var(--accent-soft);margin:14px 0">
+    <div class="tx" style="font-size:24px;line-height:38px">${CUR}</div></div>
+  <div class="tx sent-other" style="font-size:19px;line-height:30px">It helps your heart, it clears your head, and it does not cost a thing.</div>
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 20px;margin-top:20px;font-size:13px;color:var(--t2)">
+    <div class="row tx" style="gap:10px"><span class="now">walk</span><span style="font-weight:500">当前词：底色胶囊</span></div>
+    <div class="row tx" style="gap:10px"><span class="lk" style="font-size:20px">‿</span><span style="font-weight:500">连读：弧线</span></div>
+    <div class="row tx" style="gap:10px"><span class="weak">of</span><span style="font-weight:500">弱读：小一号、淡一级</span></div>
+    <div class="row tx" style="gap:10px"><span class="read dot">it</span><span style="font-weight:500">闪音 / 同化 / 省音：点线</span></div>
+    <div class="row" style="gap:10px"><span style="font-weight:700;color:var(--t1)">24 / 38</span><span>当前句 · 字号/行高（px）</span></div>
+    <div class="row" style="gap:10px"><span style="font-weight:700;color:var(--other)">19 / 30</span><span>其它句 · 55–65% 亮度</span></div>
+  </div>`;});
+
+/* ---------- 移动端页面模板 ---------- */
+const bottomBar=(on='lib')=>{const r=21.5,c=2*Math.PI*r;const cur={home:'首页',lib:'资料库',search:'搜索',gear:'设置'}[on];return `<div class="bb">
+  <div class="bb-player" role="region" aria-label="正在播放">
+    <div class="bb-pl">
+      <div style="position:relative;width:46px;height:46px;flex-shrink:0">
+        <svg width="46" height="46" viewBox="0 0 46 46" style="position:absolute;inset:0" aria-hidden="true"><circle cx="23" cy="23" r="${r}" fill="none" stroke="var(--wave-e)" stroke-width="2.5"/><circle cx="23" cy="23" r="${r}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="${(c*.42).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 23 23)"/></svg>
+        <div style="position:absolute;inset:5px;border-radius:999px;background:var(--card);display:flex;align-items:center;justify-content:center;padding:0 8px">${wave('Why We Should Walk More',5,4,18,{color:'var(--accent)',style:'width:100%'})}</div>
+      </div>
+      <div class="bb-pl-rest">
+        <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Why We Should Walk More</div><div style="font-size:12px;color:var(--accent-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Doctors say that a short walk after…</div></div>
+        <button class="icon-btn" aria-label="暂停">${PAUSE(22)}</button><button class="icon-btn" aria-label="下一句">${I('next',22,1.9)}</button>
+      </div>
+    </div>
+    <button class="bb-ball" data-act="expand-player" aria-label="展开播放条"></button>
+  </div>
+  <div class="bb-tabs">
+    <nav class="bb-tabs-full" aria-label="主导航">${[['home','首页'],['lib','资料库'],['search','搜索'],['gear','设置']].map(([k,n])=>`<a href="#" class="${on===k?'on':''}" ${on===k?'aria-current="page"':''}>${I(k,22,on===k?2:1.75)}<span>${n}</span></a>`).join('')}</nav>
+    <button class="bb-ball" data-act="expand-tabs" aria-label="展开导航（当前：${cur}）">${I(on,24,2)}</button>
+  </div>
+</div>`;};
+const LIBROWS=[['How Coffee Travelled the World','6 分钟 · Heart 美音','conv'],['The Quiet Power of Mornings','3 分钟 · Heart 美音','saved'],['Small Habits Add Up','4 分钟 · George 英音',''],['A Walk in the Rain','2 分钟 · Bella 美音',''],['How to Read Faster','约 5 分钟','none'],['The Science of Habits','6 分钟 · Heart 美音',''],['Pick It Up: Everyday Phrasal Verbs','3 分钟 · Emma 英音','saved'],['Why We Learn Better by Listening','5 分钟 · Michael 美音',''],['A Note on Sleep','约 4 分钟','none']];
+const statusChip=(s,sz=12)=>s==='conv'?`<span class="chip accent" style="height:22px;font-size:${sz}px;padding:0 8px"><span class="mini-prog" style="width:22px"><b style="width:10px"></b></span>4/9</span>`:
+ s==='saved'?`<span class="row" style="gap:4px;color:var(--accent-text);font-weight:700;font-size:${sz}px">${SAVED(12)}已保存</span>`:
+ s==='none'?`<span class="chip ghost" style="height:22px;font-size:${sz}px;padding:0 8px">未转换</span>`:'';
+function library(state='A',offset=0,scroll=false){return `
+<div class="${state==='A'?'fade-m':'fade-m1'}${scroll?' demo-scroll':''}" style="flex:1;min-height:0;overflow:${scroll?'auto':'hidden'};padding:60px 20px ${scroll?'190px':'0'}">
+<div style="display:flex;flex-direction:column;gap:20px;${offset?'transform:translateY(-'+offset+'px)':''}">
+  <div class="row" style="justify-content:space-between">
+    <h1 style="margin:0;font-family:var(--display);font-weight:700;font-size:32px;letter-spacing:-.02em">资料库</h1>
+    <div class="row" style="gap:8px"><button class="icon-btn fill" aria-label="搜索">${I('search')}</button><button class="icon-btn" style="background:var(--accent);color:var(--accent-ink)" aria-label="导入文章">${I('plus',22,2.2)}</button></div>
+  </div>
+  <div class="row" style="gap:8px"><button class="chip accent" style="height:34px;font-size:14px">全部 5</button><button class="chip muted" style="height:34px;font-size:14px">转换中 1</button><button class="chip muted" style="height:34px;font-size:14px">已保存</button><button class="chip muted" style="height:34px;font-size:14px">未转换</button></div>
+  <div class="panel" style="padding:16px;border-radius:22px;display:flex;flex-direction:column;gap:14px">
+    <div class="label">继续收听</div>
+    <div class="row" style="gap:14px">${thumb('Why We Should Walk More',72,11,'var(--accent)')}
+      <div style="flex:1;min-width:0"><div style="font-family:var(--display);font-weight:700;font-size:18px;line-height:22px">Why We Should Walk More</div><div style="font-size:13px;color:var(--t2);margin-top:4px">第 4/9 句 · 剩余 2 分钟</div></div>
+      <button class="play" style="width:48px;height:48px" aria-label="继续播放">${PLAY(20)}</button></div>
+    <div style="height:4px;border-radius:2px;background:var(--wave-e)"><div style="width:42%;height:4px;border-radius:2px;background:var(--accent)"></div></div>
+  </div>
+  <div><div style="font-family:var(--display);font-weight:600;font-size:20px;padding-bottom:4px">全部文章</div>
+  ${LIBROWS.map(([t,m,s],i)=>`<div class="row" style="gap:14px;padding:12px 0;box-shadow:inset 0 -1px 0 var(--line)">${thumb(t,56,9,i%2?'var(--accent)':'var(--violet)')}<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:15px;line-height:20px">${t}</div><div class="row" style="gap:8px;margin-top:6px;font-size:13px;color:var(--t2)"><span>${m}</span>${statusChip(s)}</div></div><button class="icon-btn" style="color:var(--t2)" aria-label="更多操作">${MORE}</button></div>`).join('')}</div>
+</div>
+</div>
+${bottomBar('lib')}`;}
+
+function player(focus){return `
+<div class="row" style="justify-content:space-between;padding:54px 12px 0;${focus?'opacity:0;':''}">
+  <button class="icon-btn" aria-label="收起">${I('down',24,1.9)}</button><div style="font-size:13px;font-weight:700;color:var(--t2)">第 4 / 9 句</div><button class="icon-btn" aria-label="更多">${MORE}</button></div>
+<div class="row" style="gap:12px;padding:8px 20px 0;${focus?'opacity:0;':''}">${thumb('Why We Should Walk More',48,7,'var(--accent)')}
+  <div style="flex:1;min-width:0"><div style="font-family:var(--display);font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Why We Should Walk More</div><div style="font-size:13px;color:var(--t2)">Heart · 美音</div></div>
+  <button class="icon-btn fill" aria-label="已保存">${SAVED(18)}</button></div>
+<div class="fade-mp" style="flex:1;min-height:0;overflow:hidden;padding:${focus?'96px':'36px'} 22px 0;display:flex;flex-direction:column;gap:22px;position:relative">
+  <div class="tx sent-other" style="font-size:19px;line-height:30px">We sit at our desks, we sit in the car, and then we sit on the sofa.</div>
+  <div style="padding:18px;border-radius:22px;background:var(--card);box-shadow:inset 0 0 0 1px var(--accent-soft),var(--elev)">
+    <div class="tx" style="font-size:24px;line-height:38px">${focus?CUR_PLAIN:CUR}</div>
+    ${focus?'':`<div class="row" style="gap:8px;margin-top:12px"><span class="chip violet" style="height:26px;font-size:12px">3 处连读</span><span class="chip muted" style="height:26px;font-size:12px">4 个弱读</span></div>`}
+  </div>
+  <div class="tx sent-other" style="font-size:19px;line-height:30px">It helps your heart, it clears your head, and it does not cost a thing.</div>
+  <div class="tx sent-pending" style="font-size:19px;line-height:30px">Did you know that walking can also make you more creative?</div>
+  <div class="tx sent-pending" style="font-size:19px;line-height:30px">Many writers and thinkers went for a long walk whenever they got stuck.</div>
+  <div class="tx sent-pending" style="font-size:19px;line-height:30px">So the next time you feel tired or stuck, step outside for ten minutes.</div>
+  ${focus?`<div style="position:absolute;left:0;right:0;top:0;height:60px;background:linear-gradient(var(--bg),transparent)"></div>`:''}
+</div>
+<div class="m-glass" role="region" aria-label="播放控制" style="bottom:10px;width:calc(100% - 20px);border-radius:38px;padding:16px 18px 20px;display:flex;flex-direction:column;gap:14px">
+  <div>${wave('player',56,6,32,{bottom:true,gap:3,played:24,buffered:40})}
+    <div class="row" style="justify-content:space-between;margin-top:6px;font-size:12px;font-weight:700;color:var(--t2)"><span>1:02</span><span>约 -2:41</span></div></div>
+  ${focus?`<div style="text-align:center;font-size:12px;color:var(--t2);padding:2px 0 6px">专注模式 · 轻点任意处显示控件</div>`:`
+  <div class="row" style="justify-content:space-between">
+    <button class="chip neutral" style="height:40px;padding:0 14px;font-size:14px" aria-label="倍速">1.0×</button>
+    <button class="icon-btn" aria-label="上一句">${I('prev',28,1.9)}</button>
+    <button class="play" style="width:72px;height:72px" aria-label="暂停">${PAUSE(28)}</button>
+    <button class="icon-btn" aria-label="下一句">${I('next',28,1.9)}</button>
+    <button class="icon-btn" style="color:var(--accent-text)" aria-label="单句循环">${I('loop',24)}</button></div>
+  <div class="row" style="justify-content:space-between">
+    <button class="chip violet" style="height:36px">${I('annot',16,2)}跟读标注</button><button class="chip muted" style="height:36px">${I('textsize',16,1.9)}阅读设置</button>
+    <button class="icon-btn" aria-label="待播清单">${I('queue')}</button></div>`}
+</div>`;}
+
+function word(){return `
+<div style="padding:110px 22px 0;opacity:.4">
+  <div class="tx" style="font-size:24px;line-height:38px"><span class="read">Pick</span><span class="lk">‿</span><span class="read">it</span><span class="lk">‿</span><span class="read">up</span><span class="lk">‿</span><span class="weak read">and</span> <span class="read">put</span><span class="lk">‿</span><span class="read dot">it</span><span class="lk">‿</span><span class="up">on</span> <span class="weak">the</span> <span class="up">table.</span></div>
+  <div class="tx sent-other" style="font-size:19px;line-height:30px;margin-top:18px">Did you get it at an early hour?</div></div>
+<div style="position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-radius:28px 28px 0 0;box-shadow:0 -16px 40px rgba(0,0,0,.18),inset 0 1px 0 var(--line);padding:12px 22px 40px;display:flex;flex-direction:column;gap:18px">
+  <div style="width:40px;height:5px;border-radius:3px;background:var(--control);align-self:center"></div>
+  <div class="row" style="justify-content:space-between;align-items:flex-start">
+    <div><div style="font-family:var(--display);font-weight:700;font-size:34px">put<span style="color:var(--violet)">‿</span>it</div><div style="font-family:var(--ipa);font-size:20px;color:var(--violet-text);margin-top:4px">/pˈʊɾ ɪt/</div></div>
+    <button class="icon-btn fill" aria-label="播放这个词">${I('vol',20,1.9)}</button></div>
+  <div class="row" style="gap:8px"><span class="chip violet">跨词闪音</span><span class="chip muted">美式发音</span></div>
+  <div style="font-size:15px;line-height:25px;color:var(--t2)"><b style="color:var(--t1)">put</b> 末尾的 t 夹在两个元音之间，读得像轻快的 d，并和后面的 <b style="color:var(--t1)">it</b> 连成一个音节：<span style="font-family:var(--ipa);color:var(--violet-text)">/pʊɾɪt/</span>。</div>
+  <div style="padding:14px 16px;border-radius:16px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line);font-size:14px;color:var(--t2);line-height:22px">同类：<span class="tx" style="color:var(--t1)">get<span class="lk">‿</span>it</span> · <span class="tx" style="color:var(--t1)">what<span class="lk">‿</span>are</span> · <span class="tx" style="color:var(--t1)">a lot<span class="lk">‿</span>of</span></div>
+  <div class="row" style="gap:10px"><button class="play" style="flex:1;height:48px;font-weight:700;font-size:15px">从这里播放</button><button class="chip neutral" style="flex:1;height:48px;justify-content:center;font-size:15px">0.75× 慢放这句</button></div>
+</div>`;}
+
+function importer(){return `
+<div style="height:40px"></div>
+<div style="flex:1;margin-top:14px;background:var(--surface);border-radius:28px 28px 0 0;padding:12px 20px 34px;display:flex;flex-direction:column;gap:16px;box-shadow:inset 0 1px 0 var(--line)">
+  <div style="width:40px;height:5px;border-radius:3px;background:var(--control);align-self:center"></div>
+  <div class="row" style="justify-content:space-between"><button class="icon-btn fill" aria-label="关闭">${I('close',20,2)}</button><div style="font-family:var(--display);font-weight:700;font-size:20px">导入文章</div><div style="width:44px"></div></div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);padding:4px;border-radius:14px;background:var(--bg)">
+    <button style="height:38px;border:none;border-radius:11px;background:var(--card);color:var(--t1);font-weight:700;font-size:14px;box-shadow:0 1px 2px rgba(0,0,0,.08)">粘贴文本</button><button style="height:38px;border:none;border-radius:11px;background:transparent;color:var(--t2);font-weight:700;font-size:14px">文件</button><button style="height:38px;border:none;border-radius:11px;background:transparent;color:var(--t2);font-weight:700;font-size:14px">剪贴板</button></div>
+  <label style="display:flex;flex-direction:column;gap:8px"><span class="label">标题（可选）</span><input value="The Quiet Power of Mornings" style="height:48px;border-radius:14px;border:none;background:var(--card);box-shadow:inset 0 0 0 1px var(--line);color:var(--t1);padding:0 14px;font-family:var(--ui);font-size:15px;font-weight:600;outline:none"></label>
+  <label style="display:flex;flex-direction:column;gap:8px;flex:1;min-height:0"><span class="label">正文</span><textarea style="flex:1;min-height:180px;resize:none;border-radius:14px;border:none;background:var(--card);box-shadow:inset 0 0 0 1px var(--line);color:var(--t1);padding:14px;font-family:var(--ui);font-size:15px;line-height:24px;outline:none">Most successful people have one thing in common: they protect the first hour of the day. Before the emails and the meetings, they read, walk, or simply sit with a cup of coffee.
+
+Mornings are quiet. That quiet is not empty — it is room to think.</textarea></label>
+  <div style="padding:4px 14px;border-radius:16px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line)">
+    <div class="row" style="justify-content:space-between;height:52px;box-shadow:inset 0 -1px 0 var(--line)"><span style="font-size:15px;font-weight:600">音色</span><span class="chip neutral">Heart · 美音 ›</span></div>
+    <div class="row" style="justify-content:space-between;height:52px"><span style="font-size:15px;font-weight:600">导入后立即播放</span><span role="switch" aria-checked="true" style="width:50px;height:30px;border-radius:999px;background:var(--accent);position:relative;display:inline-block"><span style="position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:999px;background:var(--accent-ink)"></span></span></div></div>
+  <div style="font-size:13px;color:var(--t2);text-align:center">共 4 句 · 预计约 40 秒 · 离线转换，不上传</div>
+  <button class="play" style="height:54px;font-weight:700;font-size:16px">开始转换</button>
+</div>`;}
+
+function settings(){return `
+<div style="padding:60px 20px 0;display:flex;flex-direction:column;gap:22px;flex:1">
+  <div class="row" style="justify-content:space-between"><button class="icon-btn fill" aria-label="关闭">${I('close',20,2)}</button><div style="font-family:var(--display);font-weight:700;font-size:20px">阅读设置</div><div style="width:44px"></div></div>
+  <div style="padding:16px 18px;border-radius:20px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line)">
+    <div class="label" style="margin-bottom:10px">预览</div>
+    <div class="tx" style="font-size:24px;line-height:38px">${CUR}</div></div>
+  <div style="display:flex;flex-direction:column;gap:10px"><div class="label">主题</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);padding:4px;border-radius:14px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)">
+      <button style="height:40px;border:none;border-radius:11px;background:var(--control);color:var(--t1);font-weight:700;font-size:14px">跟随系统</button>
+      <button class="row" style="justify-content:center;gap:6px;height:40px;border:none;border-radius:11px;background:transparent;color:var(--t2);font-weight:700;font-size:14px">${I('sun',16)}白天</button>
+      <button class="row" style="justify-content:center;gap:6px;height:40px;border:none;border-radius:11px;background:transparent;color:var(--t2);font-weight:700;font-size:14px">${I('moon',16)}夜间</button></div></div>
+  <div style="display:flex;flex-direction:column;gap:10px"><div class="row" style="justify-content:space-between"><div class="label">字号</div><span style="font-size:13px;color:var(--t2)">标准 · 24px</span></div>
+    <div class="row" style="gap:14px"><span style="font-size:14px;font-weight:700">A</span><div style="flex:1;height:6px;border-radius:3px;background:var(--wave-e);position:relative"><div style="width:40%;height:6px;border-radius:3px;background:var(--accent)"></div><span style="position:absolute;left:calc(40% - 12px);top:-9px;width:24px;height:24px;border-radius:999px;background:var(--card);box-shadow:0 1px 4px rgba(0,0,0,.3),inset 0 0 0 1px var(--line)"></span></div><span style="font-size:22px;font-weight:700">A</span></div></div>
+  <div style="display:flex;flex-direction:column;gap:10px"><div class="label">行距</div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);padding:4px;border-radius:14px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)"><button style="height:40px;border:none;border-radius:11px;background:var(--control);color:var(--t1);font-weight:700;font-size:14px">舒适 1.6</button><button style="height:40px;border:none;border-radius:11px;background:transparent;color:var(--t2);font-weight:700;font-size:14px">紧凑 1.4</button></div></div>
+  <div style="padding:4px 16px;border-radius:16px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line)">
+    <div class="row" style="justify-content:space-between;height:54px;box-shadow:inset 0 -1px 0 var(--line)"><span style="font-size:15px;font-weight:600">非当前句亮度</span><span class="chip neutral">适中 60% ›</span></div>
+    <div class="row" style="justify-content:space-between;height:54px;box-shadow:inset 0 -1px 0 var(--line)"><span style="font-size:15px;font-weight:600">专注模式（5 秒后收起控件）</span><span role="switch" aria-checked="true" style="width:50px;height:30px;border-radius:999px;background:var(--accent);position:relative;display:inline-block"><span style="position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:999px;background:var(--accent-ink)"></span></span></div>
+    <div class="row" style="justify-content:space-between;height:54px"><span style="font-size:15px;font-weight:600">显示跟读标注</span><span role="switch" aria-checked="true" style="width:50px;height:30px;border-radius:999px;background:var(--accent);position:relative;display:inline-block"><span style="position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:999px;background:var(--accent-ink)"></span></span></div></div>
+</div>`;}
+
+const PHONES=[
+ ['播放 · 原文为中心','t-dark',()=>player(false)],['播放 · 原文为中心','t-light',()=>player(false)],
+ ['专注模式（控件已收起）','t-dark',()=>player(true)],['点词读音','t-light',word],
+ ['资料库','t-dark',()=>library('A'),'data-bb="A"'],['资料库','t-light',()=>library('A'),'data-bb="A"'],
+ ['导入文章','t-light',importer],['阅读设置','t-dark',settings],
+ ['底部栏 B · 滚动后：导航收成左侧小球','t-dark',()=>library('B',250),'data-bb="B"'],
+ ['底部栏 C · 点小球：导航展开、播放条收成右侧小球','t-dark',()=>library('C',250),'data-bb="C"'],
+ ['可交互演示 · 滚动列表 / 点小球','t-light',()=>library('A',0,true),'data-bb="A" data-demo'],
+ ['CARD']];
+const BB_CARD=`<div class="phone-wrap"><div class="phone-name">底部栏状态规则</div><div style="width:390px;padding:28px;border-radius:28px;background:#171B26;box-shadow:inset 0 0 0 1px #262C3A;color:#D8DCE5;display:flex;flex-direction:column;gap:18px;font-size:14px;line-height:22px">
+  <div style="font-family:var(--display);font-weight:700;font-size:20px">三种状态</div>
+  <div><b style="color:#5FD9C6">A 默认</b>　列表在顶部：播放条在上、导航在下，两行。</div>
+  <div><b style="color:#5FD9C6">B 滚动后</b>　向下滚动：导航收成左侧小球（显示当前 Tab 图标），播放条落到同一行并占满剩余宽度。</div>
+  <div><b style="color:#5FD9C6">C 点开导航</b>　点左侧小球：导航在同一行展开；播放条收成右侧小球——正好缩成它左端的圆形封面与进度环。</div>
+  <div style="height:1px;background:#262C3A"></div>
+  <div><b>切换</b>　C 中点右侧小球 → B；滚回顶部 → A。C 状态下继续滚动列表保持 C 不变（用户主动打开的导航不被滚动打断）。</div>
+  <div><b>动效</b>　位置与宽度用弹簧曲线（约 0.42 秒），文字与按钮淡入淡出；开启“减少动态效果”时直接切换。</div>
+  <div><b>尺寸</b>　药丸与小球同高 60px，小球 60×60，间距 10px，左右边距 16px，底部离手势条 26px；触控区域均 ≥ 44px。</div>
+</div></div>`;
+document.getElementById('phones').innerHTML=PHONES.map(([n,th,f,attrs])=>n==='CARD'?BB_CARD:`<div class="phone-wrap"><div class="phone-name">${n}<b style="${th==='t-dark'?'background:#1E2330;color:#D8DCE5':'background:#E7E9EE;color:#1E232E'}">${th==='t-dark'?'夜间':'白天'}</b></div><div class="phone themed ${th}" ${attrs||''}>${f()}</div></div>`).join('');
+/* 交互演示：滚动收起导航；点小球互换 */
+document.querySelectorAll('[data-demo]').forEach(ph=>{
+  const sc=ph.querySelector('.demo-scroll');
+  const set=st=>{ph.dataset.bb=st;sc.classList.toggle('fade-m',st==='A');sc.classList.toggle('fade-m1',st!=='A');};
+  sc.addEventListener('scroll',()=>{const y=sc.scrollTop;if(y>24&&ph.dataset.bb==='A')set('B');else if(y<4&&ph.dataset.bb!=='A')set('A');});
+  ph.querySelector('[data-act="expand-tabs"]').addEventListener('click',()=>set('C'));
+  ph.querySelector('[data-act="expand-player"]').addEventListener('click',()=>set('B'));
+});
+
+/* ---------- 桌面端模板 ---------- */
+const DROWS=[['Why We Should Walk More','Heart · 美音','4:12','now'],['How Coffee Travelled the World','Heart · 美音','约 6:00','conv'],['Pick It Up: Everyday Phrasal Verbs','Emma · 英音','3:05','saved'],['Why We Learn Better by Listening','Michael · 美音','5:20',''],['A Note on Sleep','—','约 4:00','none'],['The Quiet Power of Mornings','Heart · 美音','2:48','saved'],['Small Habits Add Up','George · 英音','3:36',''],['A Walk in the Rain','Bella · 美音','2:10',''],['How to Read Faster','Fenrir · 美音','约 5:00','none']];
+function desktop(){return `
+<div style="flex:1;min-height:0;display:flex">
+  <aside class="fade-panel" style="position:relative;width:248px;flex-shrink:0;padding:20px 14px;display:flex;flex-direction:column;gap:22px"><i class="split" style="right:0"></i>
+    <div class="row" style="gap:10px;padding:0 6px"><div style="width:30px;height:30px;border-radius:9px;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;gap:2px"><i style="width:3px;height:8px;border-radius:2px;background:currentColor"></i><i style="width:3px;height:15px;border-radius:2px;background:currentColor"></i><i style="width:3px;height:20px;border-radius:2px;background:currentColor"></i><i style="width:3px;height:12px;border-radius:2px;background:currentColor"></i><i style="width:3px;height:7px;border-radius:2px;background:currentColor"></i></div><span style="font-family:var(--display);font-weight:700;font-size:17px">English Speaker</span></div>
+    <label class="row" style="gap:8px;height:38px;padding:0 12px;border-radius:12px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line);color:var(--t2)">${I('search',16,2)}<input placeholder="搜索文章与原文" style="flex:1;border:none;background:transparent;color:var(--t1);font-family:var(--ui);font-size:14px;outline:none"></label>
+    <nav style="display:flex;flex-direction:column;gap:2px">
+      ${[['home','首页',''],['lib','全部文章','5',true],['wave','转换中','1'],['bookmark','已保存','2'],['cloud','未转换','']].map(([ic,n,c,on])=>`<a href="#" class="row" style="gap:10px;height:38px;padding:0 12px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;${on?'background:var(--accent-soft);color:var(--accent-text)':'color:var(--t2)'}">${I(ic,18)}<span style="flex:1">${n}</span><span>${c}</span></a>`).join('')}
+      <div style="height:1px;background:var(--line);margin:10px 12px"></div>
+      <a href="#" class="row" style="gap:10px;height:38px;padding:0 12px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;color:var(--t2)">${I('gear',18)}<span style="flex:1">设置</span></a>
+    </nav>
+  </aside>
+  <div class="fade-under" style="flex:1;min-width:0;padding:28px 32px;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+    <div class="row" style="justify-content:space-between"><h1 style="margin:0;font-family:var(--display);font-weight:700;font-size:30px;letter-spacing:-.02em">全部文章</h1><button class="play row" style="height:40px;padding:0 18px;gap:8px;font-weight:700;font-size:14px">${I('plus',16,2.4)}导入文章</button></div>
+    <div style="display:grid;grid-template-columns:56px 1fr 150px 80px 150px;gap:16px;padding:0 12px 10px;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--t2);box-shadow:inset 0 -1px 0 var(--line)"><span></span><span>标题</span><span>音色</span><span>时长</span><span>状态</span></div>
+    ${DROWS.map(([t,v,d,s],i)=>`<div style="display:grid;grid-template-columns:56px 1fr 150px 80px 150px;gap:16px;align-items:center;padding:10px 12px;border-radius:14px;${s==='now'?'background:var(--accent-soft)':''}">${thumb(t,48,7,i%2?'var(--violet)':'var(--accent)')}<span style="font-weight:700;font-size:15px;${s==='now'?'color:var(--accent-text)':''}">${t}</span><span style="font-size:14px;color:var(--t2)">${v}</span><span style="font-size:14px;color:var(--t2)">${d}</span><span>${s==='now'?'<span class="chip accent" style="height:24px;font-size:12px">正在播放</span>':statusChip(s)}</span></div>`).join('')}
+  </div>
+  <aside class="fade-panel" style="position:relative;width:460px;flex-shrink:0;padding:24px 28px;display:flex;flex-direction:column;overflow:hidden"><i class="split" style="left:0"></i>
+    <div class="fade-under" style="flex:1;min-height:0;display:flex;flex-direction:column;gap:18px;overflow:hidden">
+    <div class="row" style="justify-content:space-between"><div class="label">原文 · 第 4 / 9 句</div><div class="row" style="gap:8px"><button class="chip muted" style="height:30px">${I('textsize',14,1.9)}Aa</button><button class="chip violet" style="height:30px">${I('annot',14,2.2)}跟读标注</button></div></div>
+    <div class="tx sent-other" style="font-size:18px;line-height:29px;margin-top:40px">Most of us spend far too much time sitting down.</div>
+    <div class="tx sent-other" style="font-size:18px;line-height:29px">We sit at our desks, we sit in the car, and then we sit on the sofa.</div>
+    <div style="padding:16px 18px;border-radius:18px;background:var(--card);box-shadow:inset 0 0 0 1px var(--accent-soft),var(--elev)"><div class="tx" style="font-size:23px;line-height:37px">${CUR}</div></div>
+    <div class="tx sent-other" style="font-size:18px;line-height:29px">It helps your heart, it clears your head, and it does not cost a thing.</div>
+    <div class="tx sent-pending" style="font-size:18px;line-height:29px">Did you know that walking can also make you more creative?</div>
+    <div class="tx sent-pending" style="font-size:18px;line-height:29px">Many writers and thinkers went for a long walk whenever they got stuck.</div>
+    <div class="tx sent-pending" style="font-size:18px;line-height:29px">So the next time you feel tired or stuck, step outside for ten minutes.</div>
+    </div>
+  </aside>
+</div>
+<div class="glassbar" role="region" aria-label="播放控制">
+  <div class="row" style="gap:4px">
+    <button class="gbtn" style="color:var(--accent-text)" aria-label="单句循环（已开启）">${G.loop}</button>
+    <button class="gbtn" aria-label="上一句">${G.prev}</button>
+    <button class="gbtn" style="width:44px;height:44px" aria-label="暂停">${G.pause}</button>
+    <button class="gbtn" aria-label="下一句">${G.next}</button>
+    <button class="gbtn" style="width:auto;padding:0 10px;font-weight:700;font-size:14px" aria-label="倍速">1.0×</button>
+  </div>
+  <div class="row" style="gap:14px;min-width:0">
+    ${thumb('Why We Should Walk More',38,6,'var(--accent)')}
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+      <div class="row" style="gap:10px;min-width:0"><span style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Why We Should Walk More</span><span style="font-size:12px;color:var(--t2);white-space:nowrap">Heart · 美音 · 第 4/9 句</span></div>
+      <div class="row" style="gap:10px;font-size:11px;font-weight:700;color:var(--t2)"><span>1:02</span>${wave('desk',120,2,10,{bottom:true,gap:2,played:50,buffered:86,style:'flex:1'})}<span>-2:41</span></div>
+    </div>
+  </div>
+  <div class="row" style="gap:6px">
+    <button class="gbtn" aria-label="原文">${G.lyrics}</button>
+    <button class="gbtn" aria-label="待播清单">${G.queue}</button>
+    <button class="gbtn on" aria-label="跟读标注（已开启）">${G.annot}</button>
+    <button class="gbtn" aria-label="音量">${G.vol}</button>
+  </div>
+</div>`;}
+document.querySelectorAll('[data-screen="desktop"]').forEach(el=>el.innerHTML=desktop());
+</script>
+</body>
+</html>

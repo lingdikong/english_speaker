@@ -1,0 +1,86 @@
+# xcodegen 工程描述：`xcodegen generate` 生成 EnglishSpeaker.xcodeproj
+name: EnglishSpeaker
+options:
+  bundleIdPrefix: app.englishspeaker
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  developmentLanguage: zh-Hans
+packages:
+  SpeakerCore:
+    path: ../SpeakerCore
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+targets:
+  EnglishSpeaker:
+    type: application
+    platform: iOS
+    sources:
+      - path: EnglishSpeaker
+      # Kokoro 模型作为 folder reference 打进 Bundle（Bundle/models/kokoro/...）；缺失时退回 Mock 引擎
+      - path: ../../../models
+        type: folder
+        buildPhase: resources
+        optional: true
+    dependencies:
+      - package: SpeakerCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.englishspeaker.ios
+        PRODUCT_NAME: EnglishSpeaker
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: English Speaker
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+    info:
+      path: EnglishSpeaker/Info.plist
+      properties:
+        UIBackgroundModes: [audio]
+        # 随 Bundle 打包的 OFL 字体（离线可用）
+        UIAppFonts:
+          - SpaceGrotesk-SemiBold.ttf
+          - SpaceGrotesk-Bold.ttf
+          - Manrope-Medium.ttf
+          - Manrope-SemiBold.ttf
+          - Manrope-Bold.ttf
+          - NotoSans-Regular.ttf
+          - NotoSans-Medium.ttf
+        CFBundleDisplayName: English Speaker
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+  # 端到端 UI 测试（真实点按：导入 → 播放 → 高亮跟随 → 点句跳转）
+  EnglishSpeakerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: EnglishSpeakerUITests
+    dependencies:
+      - target: EnglishSpeaker
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: app.englishspeaker.ios.uitests
+        TEST_TARGET_NAME: EnglishSpeaker
+schemes:
+  EnglishSpeaker:
+    build:
+      targets:
+        EnglishSpeaker: all
+    run:
+      config: Debug
+    test:
+      targets:
+        - EnglishSpeakerUITests

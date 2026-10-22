@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- 品牌图形：5 根竖条声波 -->
+    <path android:strokeColor="#0E1A18" android:strokeWidth="5.20" android:strokeLineCap="round"
+        android:pathData="M35.80,47.50V60.50M44.90,39.70V68.30M54.00,33.20V74.80M63.10,42.30V65.70M72.20,48.80V59.20" />
+</vector>

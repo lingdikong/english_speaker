@@ -219,7 +219,10 @@ impl BrowserSideHandler for BridgeQueryHandler {
         if cmd.starts_with("window_") {
             let mut task = WindowCommandTask::new(cmd);
             post_task(ThreadId::UI, Some(&mut task));
-            callback.lock().unwrap().success_str(r#"{"ok":true,"data":null}"#);
+            callback
+                .lock()
+                .unwrap()
+                .success_str(r#"{"ok":true,"data":null}"#);
             return true;
         }
         match self.0.queries.lock().unwrap().as_ref() {
@@ -559,18 +562,45 @@ wrap_window_delegate! {
     }
 }
 
-/// 无边框窗口的拖动区：顶部整条可拖动，右侧窗口按钮区域挖孔（页面按钮仍可点击）。
+/// 无边框窗口的拖动区：顶部整条可拖动，窗口按钮区域挖孔（页面按钮仍可点击）。
+/// 与 ui/web Titlebar.svelte 一致：macOS 左上角红绿灯；Windows / Linux 右上角三个 46×32 按钮。
 fn apply_drag_regions(window: &mut Window) {
-    const TITLEBAR: i32 = 40; // 与 ui/web Titlebar.svelte 高度一致
-    const CONTROLS: i32 = 132; // 右侧三个窗口按钮的占位宽度
     let width = window.bounds().width;
+    let (height, hole) = if cfg!(target_os = "macos") {
+        (
+            28,
+            Rect {
+                x: 0,
+                y: 0,
+                width: 80,
+                height: 28,
+            },
+        )
+    } else {
+        const CONTROLS: i32 = 3 * 46;
+        let x = (width - CONTROLS).max(0);
+        (
+            32,
+            Rect {
+                x,
+                y: 0,
+                width: CONTROLS,
+                height: 32,
+            },
+        )
+    };
     let regions = [
         DraggableRegion {
-            bounds: Rect { x: 0, y: 0, width, height: TITLEBAR },
+            bounds: Rect {
+                x: 0,
+                y: 0,
+                width,
+                height,
+            },
             draggable: 1,
         },
         DraggableRegion {
-            bounds: Rect { x: (width - CONTROLS).max(0), y: 0, width: CONTROLS, height: TITLEBAR },
+            bounds: hole,
             draggable: 0,
         },
     ];

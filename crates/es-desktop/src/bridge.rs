@@ -206,6 +206,8 @@ impl Bridge {
             Request::PlayerState => to_value(app.player_state()),
             Request::HostInfo => json!({
                 "host": self.host.host,
+                // 无边框窗口按系统习惯摆放窗口按钮：macos 左上角红绿灯，其余右上角
+                "os": std::env::consts::OS,
                 "engine": self.host.engine,
                 "volume": self.host.volume.as_ref().map_or(1.0, |v| v.get()),
                 // 桌面端变速（保持音调的时间伸缩）尚未实现，见 CpalSink::set_rate

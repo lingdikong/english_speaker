@@ -30,7 +30,7 @@
   }
 </script>
 
-<aside class="side fade-panel">
+<aside class="side fade-panel" class:desk={store.host.host === 'cef'}>
   <i class="split" style="right:0"></i>
   <div class="row brand">
     <Brand />
@@ -97,6 +97,10 @@
     display: flex;
     flex-direction: column;
     gap: 22px;
+  }
+  /* 无边框窗口：顶部为拖动条 + 红绿灯按钮（Titlebar.svelte），品牌区下移让位 */
+  .side.desk {
+    padding-top: 40px;
   }
   .brand {
     gap: 10px;

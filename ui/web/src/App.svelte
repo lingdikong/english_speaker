@@ -103,6 +103,7 @@
 
 <div
   class="window"
+  class:caption-right={store.host.host === 'cef' && store.host.os !== 'macos'}
   role="application"
   ondragover={(e) => {
     if (e.dataTransfer?.types.includes('Files') && !store.importOpen) {
@@ -118,29 +119,27 @@
 >
   <Titlebar />
 
-  <div class="body">
-    <Sidebar bind:this={sidebar} />
+  <Sidebar bind:this={sidebar} />
 
-    <main class="main fade-under scroll" bind:this={main}>
-      {#if error}
-        <div class="fatal">无法连接核心：{error}</div>
-      {:else if store.view.kind === 'home'}
-        <Home />
-      {:else if store.view.kind === 'list'}
-        <ListPage filter={store.view.filter} />
-      {:else if store.view.kind === 'search'}
-        <ListPage filter="all" search />
-      {:else if store.view.kind === 'settings'}
-        <Settings />
-      {/if}
-    </main>
-
-    {#if store.prefs.panel}
-      <div class="panel-wrap" transition:fly={{ x: 40, duration: dur(260) }}>
-        <Transcript />
-      </div>
+  <main class="main fade-under scroll" bind:this={main}>
+    {#if error}
+      <div class="fatal">无法连接核心：{error}</div>
+    {:else if store.view.kind === 'home'}
+      <Home />
+    {:else if store.view.kind === 'list'}
+      <ListPage filter={store.view.filter} />
+    {:else if store.view.kind === 'search'}
+      <ListPage filter="all" search />
+    {:else if store.view.kind === 'settings'}
+      <Settings />
     {/if}
-  </div>
+  </main>
+
+  {#if store.prefs.panel}
+    <div class="panel-wrap" transition:fly={{ x: 40, duration: dur(260) }}>
+      <Transcript />
+    </div>
+  {/if}
 
   <PlayerBar />
 
@@ -165,16 +164,10 @@
   .window {
     position: relative;
     display: flex;
-    flex-direction: column;
     height: 100%;
     background: var(--bg);
     color: var(--t1);
     overflow: hidden;
-  }
-  .body {
-    flex: 1;
-    min-height: 0;
-    display: flex;
   }
   .main {
     flex: 1;
@@ -187,6 +180,13 @@
   .panel-wrap {
     display: flex;
     min-height: 0;
+  }
+  /* Windows / Linux 无边框窗口：右上角窗口按钮占 32px 高，主区与原文面板顶部让位 */
+  .window.caption-right .main {
+    padding-top: 44px;
+  }
+  .window.caption-right .panel-wrap :global(.tp) {
+    padding-top: 40px;
   }
   /* 窄窗口：原文面板与主区边距收窄，保证表格可用 */
   @media (max-width: 1240px) {

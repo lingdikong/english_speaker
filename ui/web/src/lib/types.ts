@@ -116,6 +116,8 @@ export type CoreEvent =
 /** 宿主信息（`host_info`）：音量、变速能力等宿主侧能力。 */
 export interface HostInfo {
   host: string;
+  /** 宿主系统（Rust `std::env::consts::OS`）：macos / windows / linux；开发宿主可能没有 */
+  os?: string;
   volume: number;
   rate_supported: boolean;
   engine: string;

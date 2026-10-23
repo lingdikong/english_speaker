@@ -96,8 +96,8 @@ const ARTICLE: &str = "One two. Three four.\n\nFive six. Seven eight.";
 #[test]
 fn listen_while_converting() {
     let dir = temp_dir("stream");
-    // 每句约 0.4s 音频，合成要 0.5s：播放一定会追上合成
-    let h = harness(&dir, 500, Default::default(), None);
+    // Mock 每句 0.36–0.6s 音频，合成每句 1.5s：即使 CI 机器调度慢，播放也一定会追上合成
+    let h = harness(&dir, 1500, Default::default(), None);
     let id = import(&h.app, ARTICLE);
     assert_eq!(
         h.app.timeline(&id).unwrap().sentences.len(),
@@ -140,7 +140,8 @@ fn listen_while_converting() {
 fn resume_after_crash() {
     let dir = temp_dir("resume");
     let calls = Arc::new(AtomicUsize::new(0));
-    let first = harness(&dir, 150, calls.clone(), None);
+    // 每句合成 0.4s：留足时间在合成完之前取消，避免慢机器上直接变成 Ready
+    let first = harness(&dir, 400, calls.clone(), None);
     let id = import(&first.app, ARTICLE);
     wait_for("two sentences", || {
         first

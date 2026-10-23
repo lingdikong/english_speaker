@@ -20,6 +20,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 mkdir -p "$OUT"
+OUT="$(cd "$OUT" && pwd)"   # 绝对路径：后面会 cd 到打包目录再写压缩包
 case "$(uname -m)" in arm64|aarch64) ARCH=aarch64 ;; *) ARCH=x86_64 ;; esac
 case "$(uname -s)" in
   Darwin) OS=macos ;;

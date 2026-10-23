@@ -12,6 +12,7 @@
   import ContextMenu from './components/ContextMenu.svelte';
   import WordPopover from './components/WordPopover.svelte';
   import ConfirmDialog from './components/ConfirmDialog.svelte';
+  import Titlebar from './components/Titlebar.svelte';
   import Icon from './components/Icon.svelte';
   import { store } from './lib/store.svelte';
 
@@ -115,27 +116,31 @@
     if (!(e.target as HTMLElement).closest('input, textarea')) e.preventDefault();
   }}
 >
-  <Sidebar bind:this={sidebar} />
+  <Titlebar />
 
-  <main class="main fade-under scroll" bind:this={main}>
-    {#if error}
-      <div class="fatal">无法连接核心：{error}</div>
-    {:else if store.view.kind === 'home'}
-      <Home />
-    {:else if store.view.kind === 'list'}
-      <ListPage filter={store.view.filter} />
-    {:else if store.view.kind === 'search'}
-      <ListPage filter="all" search />
-    {:else if store.view.kind === 'settings'}
-      <Settings />
+  <div class="body">
+    <Sidebar bind:this={sidebar} />
+
+    <main class="main fade-under scroll" bind:this={main}>
+      {#if error}
+        <div class="fatal">无法连接核心：{error}</div>
+      {:else if store.view.kind === 'home'}
+        <Home />
+      {:else if store.view.kind === 'list'}
+        <ListPage filter={store.view.filter} />
+      {:else if store.view.kind === 'search'}
+        <ListPage filter="all" search />
+      {:else if store.view.kind === 'settings'}
+        <Settings />
+      {/if}
+    </main>
+
+    {#if store.prefs.panel}
+      <div class="panel-wrap" transition:fly={{ x: 40, duration: dur(260) }}>
+        <Transcript />
+      </div>
     {/if}
-  </main>
-
-  {#if store.prefs.panel}
-    <div class="panel-wrap" transition:fly={{ x: 40, duration: dur(260) }}>
-      <Transcript />
-    </div>
-  {/if}
+  </div>
 
   <PlayerBar />
 
@@ -160,10 +165,16 @@
   .window {
     position: relative;
     display: flex;
+    flex-direction: column;
     height: 100%;
     background: var(--bg);
     color: var(--t1);
     overflow: hidden;
+  }
+  .body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
   }
   .main {
     flex: 1;

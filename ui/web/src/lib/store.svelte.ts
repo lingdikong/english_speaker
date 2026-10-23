@@ -166,7 +166,10 @@ class Store {
     const p = this.pos;
     if (this.player.status !== 'playing') return p.position_ms;
     const t = p.position_ms + Math.max(0, this.now - p.at) * this.player.rate;
-    return Math.min(t, Math.max(p.buffered_ms, p.position_ms), p.position_ms + 400);
+    // 前探不超过一个事件间隔：否则每次 player_position 到达都会明显回跳，
+    // 逐词高亮（单词框）来回翻转看起来就是闪烁。
+    const cap = Math.min(400, Math.max(100, this.evInterval * 1.6));
+    return Math.min(t, Math.max(p.buffered_ms, p.position_ms), p.position_ms + cap);
   });
   buffered = $derived(Math.max(this.pos.buffered_ms, this.player.buffered_ms));
   duration = $derived(Math.max(this.player.duration_ms, this.current?.duration_ms ?? 0));
@@ -281,16 +284,21 @@ class Store {
       case 'player_state_changed':
         this.applyPlayer(e.state);
         break;
-      case 'player_position':
+      case 'player_position': {
+        // 记录事件实际到达间隔（EMA），供位置插值限制前探幅度，避免逐词高亮回跳
+        const at = performance.now();
+        const delta = at - this.pos.at;
+        if (delta > 20 && delta < 1000) this.evInterval += (delta - this.evInterval) * 0.3;
         this.pos = {
           position_ms: e.position_ms,
           buffered_ms: e.buffered_ms,
           sentence: e.sentence,
-          at: performance.now(),
+          at,
         };
-        this.now = performance.now();
+        this.now = at;
         this.watchPosition();
         break;
+      }
     }
   }
 
@@ -311,6 +319,8 @@ class Store {
     }
   }
 
+  /** player_position 事件的实际到达间隔（EMA，毫秒）：核心约每 100ms 推一次。 */
+  private evInterval = 100;
   /** 位置事件到达时：单句循环、单词试听、慢放结束后恢复倍速。 */
   private watchPosition() {
     const ms = this.pos.position_ms;

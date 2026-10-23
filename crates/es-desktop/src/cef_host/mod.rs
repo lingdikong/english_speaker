@@ -47,6 +47,8 @@ pub struct Shared {
     router: Arc<BrowserSideRouter>,
     /// 主窗口的浏览器（事件推送目标）。CEF 允许在浏览器进程任意线程调用 `CefFrame` 方法。
     browser: Mutex<Option<Browser>>,
+    /// 主窗口（无边框窗口控制按钮用）。只在 UI 线程访问其内容。
+    window: Mutex<Option<Window>>,
     /// 桥接请求按序交给工作线程处理，不阻塞 UI 线程。
     queries: Mutex<Option<mpsc::Sender<Query>>>,
 }
@@ -100,6 +102,7 @@ pub fn run(opts: HostOptions) -> Result<i32, Box<dyn std::error::Error>> {
         ui_dir,
         router: BrowserSideRouter::new(MessageRouterConfig::default()),
         browser: Mutex::new(None),
+        window: Mutex::new(None),
         queries: Mutex::new(None),
     });
     let _ = SHARED.set(shared.clone());
@@ -190,6 +193,7 @@ fn on_context_initialized(shared: &Arc<Shared>) {
     );
     let mut window_delegate = EsWindowDelegate::new(
         std::cell::RefCell::new(browser_view),
+        shared.clone(),
         shared.opts.window_size,
     );
     window_create_top_level(Some(&mut window_delegate));
@@ -207,9 +211,47 @@ impl BrowserSideHandler for BridgeQueryHandler {
         _persistent: bool,
         callback: Arc<Mutex<dyn BrowserSideCallback>>,
     ) -> bool {
+        // 无边框窗口的控制命令：不经核心桥，投递到 UI 线程直接操作 CEF 窗口
+        let cmd = serde_json::from_str::<serde_json::Value>(request)
+            .ok()
+            .and_then(|v| v.get("cmd").and_then(|c| c.as_str()).map(str::to_string))
+            .unwrap_or_default();
+        if cmd.starts_with("window_") {
+            let mut task = WindowCommandTask::new(cmd);
+            post_task(ThreadId::UI, Some(&mut task));
+            callback.lock().unwrap().success_str(r#"{"ok":true,"data":null}"#);
+            return true;
+        }
         match self.0.queries.lock().unwrap().as_ref() {
             Some(tx) => tx.send((request.to_string(), callback)).is_ok(),
             None => false,
+        }
+    }
+}
+
+// 在 UI 线程执行窗口控制（最小化 / 最大化还原 / 关闭）。
+wrap_task! {
+    struct WindowCommandTask {
+        cmd: String,
+    }
+
+    impl Task {
+        fn execute(&self) {
+            let Some(shared) = SHARED.get() else { return };
+            let Some(window) = shared.window.lock().unwrap().clone() else { return };
+            match self.cmd.as_str() {
+                "window_minimize" => window.minimize(),
+                "window_maximize" => {
+                    if window.is_maximized() != 0 {
+                        window.restore();
+                    } else {
+                        window.maximize();
+                    }
+                }
+                // 与 ⌘Q 同一路径：有序关闭浏览器 → on_before_close → 退出消息循环
+                "window_close" => shared.close_all(),
+                _ => {}
+            }
         }
     }
 }
@@ -259,6 +301,11 @@ wrap_app! {
                     Some(&CefString::from("disable-features")),
                     Some(&CefString::from("Translate,MediaRouter")),
                 );
+                // macOS：Chromium 默认把 Cookie 加密密钥存进钥匙串，未公证的 .app 会在
+                // 浏览器进程与网络服务进程各弹一次“想要访问钥匙串”的密码框。改用本地
+                // 派生密钥（use-mock-keychain）；本应用不保存敏感 Cookie，安全性无影响。
+                #[cfg(target_os = "macos")]
+                cl.append_switch(Some(&CefString::from("use-mock-keychain")));
             }
         }
 
@@ -446,6 +493,7 @@ wrap_browser_view_delegate! {
 wrap_window_delegate! {
     struct EsWindowDelegate {
         browser_view: std::cell::RefCell<Option<BrowserView>>,
+        shared: Arc<Shared>,
         size: (i32, i32),
     }
 
@@ -471,12 +519,30 @@ wrap_window_delegate! {
             let mut view = View::from(browser_view);
             window.add_child_view(Some(&mut view));
             window.center_window(Some(&Size { width: self.size.0, height: self.size.1 }));
+            *self.shared.window.lock().unwrap() = Some(window.clone());
+            apply_drag_regions(window);
             window.show();
             browser_view.request_focus();
         }
 
         fn on_window_destroyed(&self, _window: Option<&mut Window>) {
             *self.browser_view.borrow_mut() = None;
+            *self.shared.window.lock().unwrap() = None;
+        }
+
+        fn on_window_bounds_changed(&self, window: Option<&mut Window>, _new_bounds: Option<&Rect>) {
+            if let Some(window) = window {
+                apply_drag_regions(window);
+            }
+        }
+
+        fn is_frameless(&self, _window: Option<&mut Window>) -> i32 {
+            1
+        }
+
+        /// 无边框后不用系统标题栏按钮，关闭 / 最小化 / 最大化由页面顶栏按钮承担
+        fn with_standard_window_buttons(&self, _window: Option<&mut Window>) -> i32 {
+            0
         }
 
         fn can_close(&self, _window: Option<&mut Window>) -> i32 {
@@ -491,4 +557,22 @@ wrap_window_delegate! {
             RuntimeStyle::ALLOY
         }
     }
+}
+
+/// 无边框窗口的拖动区：顶部整条可拖动，右侧窗口按钮区域挖孔（页面按钮仍可点击）。
+fn apply_drag_regions(window: &mut Window) {
+    const TITLEBAR: i32 = 40; // 与 ui/web Titlebar.svelte 高度一致
+    const CONTROLS: i32 = 132; // 右侧三个窗口按钮的占位宽度
+    let width = window.bounds().width;
+    let regions = [
+        DraggableRegion {
+            bounds: Rect { x: 0, y: 0, width, height: TITLEBAR },
+            draggable: 1,
+        },
+        DraggableRegion {
+            bounds: Rect { x: (width - CONTROLS).max(0), y: 0, width: CONTROLS, height: TITLEBAR },
+            draggable: 0,
+        },
+    ];
+    window.set_draggable_regions(Some(&regions));
 }

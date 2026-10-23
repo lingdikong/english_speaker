@@ -16,7 +16,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || '0.0.0-dev' }}
 
 jobs:
   android:

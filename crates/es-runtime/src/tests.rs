@@ -258,6 +258,27 @@ fn cache_pool_lru_and_pinning() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 边听边转时取消/失败合成：读到现有音频末尾后应停止（暂停），
+/// 而不是永远停留在缓冲状态（无声但界面显示播放中）。
+#[test]
+fn stop_when_synthesis_ends_before_audio_does() {
+    let dir = temp_dir("stop-on-synth-done");
+    let h = harness(&dir, 1500, Default::default(), None);
+    let id = import(&h.app, ARTICLE);
+    wait_for("first sentence", || {
+        h.app.timeline(&id).unwrap().sentences[0].ready
+    });
+    h.app.play_article(&id).unwrap();
+    wait_for("buffering at frontier", || {
+        h.app.player_state().status == PlayerStatus::Buffering
+    });
+    h.app.cancel_synthesis(&id);
+    wait_for("paused instead of endless buffering", || {
+        h.app.player_state().status == PlayerStatus::Paused
+    });
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// 换音色：丢弃旧缓存并用新音色重新合成；删除文章清理文件。
 #[test]
 fn change_voice_and_delete() {

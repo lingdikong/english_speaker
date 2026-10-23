@@ -45,6 +45,30 @@
     main?.scrollTo({ top: 0 });
   });
 
+  // 原文面板开合：动画收缩/撑开宽度，让中间主区随面板退出慢慢变宽（fly 不参与布局，会瞬间跳变）。
+  // easeInOutCubic + 稍长时长，观感顺滑；css(t,u) 收到的是线性进度，需在内部套缓动。
+  function panel(node: HTMLElement, { duration }: { duration: number }) {
+    const w = node.offsetWidth;
+    return {
+      duration,
+      css: (t: number, u: number) => {
+        const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        return `width: ${e * w}px; overflow: hidden; opacity: ${e}; transform: translateX(${(1 - e) * 48}px);`;
+      },
+    };
+  }
+
+  // 面板动画期间关掉毛玻璃的 backdrop-filter：模糊区域的每一帧重算（10px 高斯）是掉帧主因，
+  // 动画进行中有位移掩盖，肉眼几乎察觉不到玻璃效果短暂消失。
+  let panelAnim = $state(false);
+  let panelTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    void store.prefs.panel;
+    panelAnim = true;
+    clearTimeout(panelTimer);
+    panelTimer = setTimeout(() => (panelAnim = false), 400);
+  });
+
   function keydown(e: KeyboardEvent) {
     const el = e.target as HTMLElement;
     if (el.closest('input, textarea, select, [contenteditable]')) return;
@@ -104,6 +128,7 @@
 <div
   class="window"
   class:caption-right={store.host.host === 'cef' && store.host.os !== 'macos'}
+  class:panel-anim={panelAnim}
   role="application"
   ondragover={(e) => {
     if (e.dataTransfer?.types.includes('Files') && !store.importOpen) {
@@ -136,7 +161,7 @@
   </main>
 
   {#if store.prefs.panel}
-    <div class="panel-wrap" transition:fly={{ x: 40, duration: dur(260) }}>
+    <div class="panel-wrap" transition:panel={{ duration: dur(360) }}>
       <Transcript />
     </div>
   {/if}
@@ -180,6 +205,12 @@
   .panel-wrap {
     display: flex;
     min-height: 0;
+    contain: layout paint; /* 动画时重排/重绘限制在面板盒子内 */
+  }
+  /* 面板开合动画期间：毛玻璃退化为半透明（高斯模糊重算是掉帧主因，动画结束恢复） */
+  .window.panel-anim :global(.glass) {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
   /* Windows / Linux 无边框窗口：右上角窗口按钮占 32px 高，主区与原文面板顶部让位 */
   .window.caption-right .main {

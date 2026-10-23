@@ -90,6 +90,7 @@
   <div class="row" style="gap:6px">
     <button
       class="gbtn"
+      class:on={store.prefs.panel}
       aria-label="原文"
       aria-pressed={store.prefs.panel}
       title="原文面板"

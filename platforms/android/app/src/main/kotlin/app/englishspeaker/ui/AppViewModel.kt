@@ -31,6 +31,14 @@ class AppViewModel : ViewModel() {
     var tab by mutableStateOf(Tab.Library)
         private set
     var playerOpen by mutableStateOf(false)
+    /**
+     * 收起请求计数（递增即触发一次收起动画）。
+     * 播放页不能靠直接置 [playerOpen] = false 关闭——那样会瞬间消失，
+     * 与 iOS 一致要先播放「整页缩回底部小球」的动画，动画结束才真正移除。
+     */
+    var collapseRequest by mutableIntStateOf(0)
+
+    fun requestCollapse() { collapseRequest++ }
     var showImport by mutableStateOf(false)
     var showUpNext by mutableStateOf(false)
     var showReading by mutableStateOf(false)

@@ -69,7 +69,7 @@
 		7966EEE856437040EC839D93 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8711ED964D021EDB7B191679 /* SampleArticles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleArticles.swift; sourceTree = "<group>"; };
 		878AFD15B2DBB61FE58FE85F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
-		88910749BDBDA87CF118D667 /* EnglishSpeaker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = EnglishSpeaker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		88910749BDBDA87CF118D667 /* EnglishSpeaker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EnglishSpeaker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8A9EEEF575BA8ED49E354CC0 /* Icons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Icons.swift; sourceTree = "<group>"; };
 		92B5DEC6D4BE839A53B6E351 /* OFL-NotoSans.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OFL-NotoSans.txt"; sourceTree = "<group>"; };
 		9436DE2A29115C8329D1A65D /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -280,7 +280,6 @@
 						TestTargetID = 7CC974A672714597B5FA6705;
 					};
 					7CC974A672714597B5FA6705 = {
-						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -401,6 +400,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = FZTBD5Y6SU;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = EnglishSpeaker/Info.plist;
@@ -426,6 +426,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = FZTBD5Y6SU;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = EnglishSpeaker/Info.plist;

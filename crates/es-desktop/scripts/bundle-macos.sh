@@ -71,6 +71,7 @@ plist() { # plist <executable> <is_helper>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
   <key>NSRequiresAquaSystemAppearance</key><false/>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
 $([[ $helper == 1 ]] && echo '  <key>LSUIElement</key><string>1</string>')
 </dict>
 </plist>
@@ -88,6 +89,7 @@ for suffix in "" " (GPU)" " (Renderer)" " (Plugin)" " (Alerts)"; do
   plist "$H" 1 > "$APP/Contents/Frameworks/$H.app/Contents/Info.plist"
 done
 
+cp "$ROOT/crates/es-desktop/assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cp -R "$ROOT/ui/web/dist" "$APP/Contents/Resources/ui"
 if [[ -d "$ROOT/models" ]]; then
   if [[ $COPY_MODELS == 1 ]]; then

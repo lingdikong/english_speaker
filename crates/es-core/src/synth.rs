@@ -114,7 +114,14 @@ fn worker(sh: Arc<Shared>, queue: SharedQueue, player: Sender<PlayerCmd>) {
             Err(_) if stopped => Ok(Outcome::Stopped),
             other => other,
         };
-        let state = match result {
+        // 任务还会继续（已完成，或被抢占后重新排队稍后续转）→ DataAvailable；
+        // 真正终止（失败 / 被取消且不再续转）→ SynthDone，让播放器停止缓冲。
+        let will_continue = match &result {
+            Ok(Outcome::Completed) => true,
+            Ok(Outcome::Stopped) => requeued,
+            Err(_) => false,
+        };
+        let state = match &result {
             Ok(Outcome::Completed) => None,
             Ok(Outcome::Stopped) if requeued => Some((AudioStatus::Queued, None)),
             Ok(Outcome::Stopped) => Some((AudioStatus::Partial, None)),
@@ -130,7 +137,12 @@ fn worker(sh: Arc<Shared>, queue: SharedQueue, player: Sender<PlayerCmd>) {
         if let Some((state, err)) = state {
             let _ = sh.storage.set_cache_state(&id, state, err.as_deref());
         }
-        let _ = player.send(PlayerCmd::DataAvailable(id));
+        let cmd = if will_continue {
+            PlayerCmd::DataAvailable(id)
+        } else {
+            PlayerCmd::SynthDone(id)
+        };
+        let _ = player.send(cmd);
         sh.emit(CoreEvent::LibraryChanged);
     }
 }

@@ -26,6 +26,8 @@ final class EngineAudioSink: PlatformAudioSink, @unchecked Sendable {
     private var lastSampleTime: Int64 = 0
     private var paused = false
     private var attached = false
+    /// 引擎重启后 player 时间轴归零，读数要整体平移回暂停时的位置（见 resume）。
+    private var timeOffset: Int64 = 0
 
     /// 背压阈值：排队超过约 200ms 时阻塞。
     private let maxQueuedSeconds = 0.2
@@ -99,9 +101,30 @@ final class EngineAudioSink: PlatformAudioSink, @unchecked Sendable {
 
     func resume() {
         lock.lock(); defer { lock.unlock() }
+        AudioSessionController.shared.activate()
         paused = false
-        if !engine.isRunning { try? engine.start() }
+        if !engine.isRunning {
+            try? engine.start()
+            // 引擎重启后 player 时间轴从 0 重新计数：把读数整体平移回暂停时的位置，
+            // 否则 playedFrames 会倒退、已排队缓冲的起点对不上 → 进度卡死。
+            timeOffset = lastSampleTime
+        }
         player.play()
+    }
+
+    /// 彻底释放音频硬件：停引擎 + 停用会话。
+    ///
+    /// `pause()` 只停播放器节点，引擎仍在渲染（静音）。只要会话还是 active、
+    /// 引擎还在跑，系统就一直把本 App 当作“正在播放音频的 App”：
+    /// 灵动岛的播放指示器不消失、App 在后台常驻、锁屏媒体控件一直挂着。
+    /// 停止播放（暂停 / 关闭）后必须调用这个把硬件还回去。
+    func suspend() {
+        lock.lock(); defer { lock.unlock() }
+        guard engine.isRunning else { return }
+        _ = currentSampleTimeLocked()   // 先记下当前位置，resume 时用它对齐时间轴
+        player.pause()
+        engine.stop()
+        AudioSessionController.shared.deactivate()
     }
 
     func flush() {
@@ -126,6 +149,8 @@ final class EngineAudioSink: PlatformAudioSink, @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         player.stop()
         resetLocked()
+        if engine.isRunning { engine.stop() }
+        AudioSessionController.shared.deactivate()
     }
 
     // MARK: 音量（播放页的音量滑块）
@@ -142,13 +167,14 @@ final class EngineAudioSink: PlatformAudioSink, @unchecked Sendable {
         completed = 0
         nextStart = 0
         lastSampleTime = 0
+        timeOffset = 0
     }
 
     /// 播放器节点时间轴上的当前采样位置。TimePitch 在其下游，所以这里计的是“源帧”，与倍速无关。
     private func currentSampleTimeLocked() -> Int64 {
         if let nodeTime = player.lastRenderTime, nodeTime.isSampleTimeValid,
            let t = player.playerTime(forNodeTime: nodeTime), t.isSampleTimeValid {
-            lastSampleTime = max(lastSampleTime, t.sampleTime)
+            lastSampleTime = max(lastSampleTime, t.sampleTime + timeOffset)
         }
         return lastSampleTime
     }
@@ -179,11 +205,14 @@ final class EngineAudioSink: PlatformAudioSink, @unchecked Sendable {
 /// AVAudioSession 配置：.playback 支持后台播放；处理打断。
 final class AudioSessionController: @unchecked Sendable {
     static let shared = AudioSessionController()
+    private let lock = NSLock()
     private var configured = false
+    private var active = false
     /// 打断开始/结束时回调（主线程）。
     var onInterruption: ((_ began: Bool) -> Void)?
 
     func activate() {
+        lock.lock(); defer { lock.unlock() }
         let session = AVAudioSession.sharedInstance()
         if !configured {
             configured = true
@@ -196,6 +225,24 @@ final class AudioSessionController: @unchecked Sendable {
                 self?.onInterruption?(type == .began)
             }
         }
-        try? session.setActive(true)
+        guard !active else { return }
+        do {
+            try session.setActive(true)
+            active = true
+        } catch { NSLog("[audio] activate failed: \(error)") }
+    }
+
+    /// 停用会话，把音频硬件还回去。
+    ///
+    /// 只 `setActive(true)` 从不停用的话，系统会一直把本 App 当作“正在播放音频的 App”：
+    /// 灵动岛的播放指示器一直挂着、锁屏/控制中心的媒体控件不下线、App 在后台也不挂起。
+    /// 调用前必须先停掉 AVAudioEngine（还有音频 I/O 时 deactivate 会失败）。
+    func deactivate() {
+        lock.lock(); defer { lock.unlock() }
+        guard active else { return }
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            active = false
+        } catch { NSLog("[audio] deactivate failed: \(error)") }
     }
 }

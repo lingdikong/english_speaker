@@ -107,8 +107,8 @@ pub trait AudioCodec: Send + Sync {
 /// 约定：
 /// - `open` 之后设备处于播放状态，缓冲为空时输出静音；
 /// - `write` 在内部缓冲超过约 200ms 时**阻塞**，以此形成背压；
-/// - `played_frames` 返回自上次 `open`/`flush` 以来设备实际播放的帧数；
-/// - 变速（保持音调）由平台实现：AVAudioUnitTimePitch / AudioTrack PlaybackParams。
+/// - `played_frames` 返回自上次 `open`/`flush` 以来设备实际播放的帧数（按源采样率计）；
+/// - 变速（保持音调）由平台实现：桌面端为内置 WSOLA，移动端可用 AVAudioUnitTimePitch。
 pub trait AudioSink: Send + Sync {
     fn open(&self, format: PcmFormat) -> Result<()>;
     fn write(&self, samples: &[f32]) -> Result<()>;
@@ -119,5 +119,8 @@ pub trait AudioSink: Send + Sync {
     fn played_frames(&self) -> u64;
     /// 返回平台是否支持该倍速。
     fn set_rate(&self, rate: f32) -> bool;
+    /// 输入流结束（之后不会再有 `write`）：冲出变速/缓冲里残留的尾部，
+    /// 让 `played_frames` 能最终追上已写入的帧数（否则结尾会被截断）。
+    fn end_stream(&self) {}
     fn close(&self);
 }

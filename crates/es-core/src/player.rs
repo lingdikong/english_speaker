@@ -25,6 +25,11 @@ const CHUNK_FRAMES: usize = 2048;
 const STARVED_POLL: Duration = Duration::from_millis(20);
 const POSITION_INTERVAL: Duration = Duration::from_millis(100);
 const PROGRESS_SAVE_INTERVAL: Duration = Duration::from_secs(5);
+/// 结尾冲刷后 `played_frames` 停止前进多久即视为放完。
+///
+/// 平台 sink 的帧数统计若因舍入 / 内部缓冲差一点永远追不上 `written`，
+/// 播放器会一直卡在播放状态却无声；此后不再依赖精确对齐，强制进入结束状态。
+const END_STALL: Duration = Duration::from_millis(500);
 
 pub(crate) enum PlayerCmd {
     Load {
@@ -39,6 +44,8 @@ pub(crate) enum PlayerCmd {
     Stop,
     /// 合成线程提交了新块或任务结束。
     DataAvailable(ArticleId),
+    /// 合成任务已终止且不会再有新数据（失败或被取消）。
+    SynthDone(ArticleId),
 }
 
 pub(crate) struct Player {
@@ -62,6 +69,10 @@ impl Player {
             loaded: None,
             status: PlayerStatus::Idle,
             rate: 1.0,
+            end_flushed: false,
+            last_played: 0,
+            last_advance: None,
+            synth_done: false,
         };
         thread::Builder::new()
             .name("es-player".into())
@@ -117,6 +128,14 @@ struct Worker {
     loaded: Option<Loaded>,
     status: PlayerStatus,
     rate: f32,
+    /// 本次加载是否已调用过 `end_stream`（结尾冲刷）。
+    end_flushed: bool,
+    /// 上次读到的 `played_frames`（用于检测结尾停滞）。
+    last_played: u64,
+    /// `played_frames` 最近一次前进的时刻（仅结尾冲刷后计时）。
+    last_advance: Option<Instant>,
+    /// 当前文章的合成任务已终止且不会再有新数据（失败 / 被取消）。
+    synth_done: bool,
 }
 
 impl Worker {
@@ -205,14 +224,47 @@ impl Worker {
             return Ok(());
         }
 
-        if self.sink.played_frames() < l.written {
-            return Ok(()); // sink 里还有没放完的
+        if l.complete && l.next_frame >= l.ready_frames() {
+            // 全部 PCM 已写入：让 sink 冲出变速器等内部缓冲的残留尾部，
+            // 否则 played_frames 永远追不上 written，文章结尾会卡在缓冲状态。
+            if !self.end_flushed {
+                self.sink.end_stream();
+                self.end_flushed = true;
+                self.last_advance = Some(Instant::now());
+            }
+        }
+        let played = self.sink.played_frames();
+        if played != self.last_played {
+            self.last_played = played;
+            if self.end_flushed {
+                self.last_advance = Some(Instant::now());
+            }
+        }
+        if played < l.written {
+            // 结尾兜底：残留尾部已冲出、位置却长时间不再前进，
+            // 说明平台 sink 的帧数统计差一点永远追不上（舍入 / 内部缓冲），
+            // 此时无声空转，直接判定放完，避免卡在播放状态。
+            let stalled = self.end_flushed
+                && self.last_advance.is_some_and(|t| t.elapsed() >= END_STALL);
+            if !stalled {
+                return Ok(()); // sink 里还有没放完的
+            }
+            log::debug!("end-of-stream stall: played {played} / written {}", l.written);
         }
         if l.complete {
             let id = l.article_id.clone();
             self.set_status(PlayerStatus::Ended);
             self.emit_position();
             let _ = self.shared.storage.save_progress(&id, 0);
+        } else if self.synth_done
+            && matches!(self.status, PlayerStatus::Playing | PlayerStatus::Buffering)
+        {
+            // 合成已终止且读到了现有音频的末尾：停下来，
+            // 而不是永远停留在缓冲状态（无声但界面显示播放中）。
+            self.sink.pause();
+            self.set_status(PlayerStatus::Paused);
+            self.emit_position();
+            self.save_progress();
         } else if self.status == PlayerStatus::Playing {
             self.set_status(PlayerStatus::Buffering);
         }
@@ -236,6 +288,10 @@ impl Worker {
                 self.sink.open(self.format)?;
                 self.sink.set_rate(self.rate);
                 *self.shared.now_playing.lock().unwrap() = Some(article_id.clone());
+                self.end_flushed = false;
+                self.last_played = 0;
+                self.last_advance = None;
+                self.synth_done = false;
                 let mut l = Loaded {
                     article_id,
                     estimated_ms: article.estimated_ms,
@@ -309,8 +365,21 @@ impl Worker {
                 };
                 let was_complete = l.complete;
                 refresh(&self.shared, l)?;
+                // 合成在继续推进（任务恢复或已完成），不再是“已终止”状态
+                self.synth_done = false;
                 if l.complete != was_complete {
                     self.emit_state();
+                }
+            }
+            PlayerCmd::SynthDone(id) => {
+                let Some(l) = self.loaded.as_mut().filter(|l| l.article_id == id) else {
+                    return Ok(());
+                };
+                refresh(&self.shared, l)?;
+                // 任务已终止且不会再有新数据：若已读到现有音频的末尾，
+                // 停下来而不是永远停留在缓冲（无声但界面显示播放中）。
+                if !l.complete {
+                    self.synth_done = true;
                 }
             }
         }
@@ -324,6 +393,9 @@ impl Worker {
         };
         let frame = self.format.ms_to_frames(ms.min(duration));
         self.sink.flush();
+        self.end_flushed = false;
+        self.last_played = 0;
+        self.last_advance = None;
         if let Some(l) = self.loaded.as_mut() {
             l.base_frame = frame;
             l.next_frame = frame;

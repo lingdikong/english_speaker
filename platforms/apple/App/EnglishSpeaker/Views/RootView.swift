@@ -57,6 +57,9 @@ struct RootView: View {
     @Environment(AppUI.self) private var ui
     @Environment(Prefs.self) private var prefs
     @Environment(\.palette) private var p
+    /// 播放页收起进度：1 = 已收起（底层界面原尺寸）；播放页全屏时 0（底层轻微缩小）。
+    /// 播放页下拉时它从 0 走到 1，底层界面同步从 0.94 放大回 1（YouTube 式）。
+    @State private var playerCollapse: CGFloat = 1
 
     var body: some View {
         @Bindable var store = store
@@ -69,6 +72,9 @@ struct RootView: View {
                     .opacity(t == ui.tab ? 1 : 0)
                     .allowsHitTesting(t == ui.tab)
                     .accessibilityHidden(t != ui.tab)
+                    // 只缩放当前 Tab：播放页收起时底层界面从 0.94 放大回 1（YouTube 式）。
+                    // 隐藏的 Tab 不参与变换，避免拖动时每帧多做三次布局。
+                    .scaleEffect(t == ui.tab ? 0.94 + 0.06 * playerCollapse : 1, anchor: .center)
             }
             // 状态栏下的渐隐：滚动的列表不和时间/电量叠在一起
             GeometryReader { g in
@@ -81,8 +87,12 @@ struct RootView: View {
             .allowsHitTesting(false)
             BottomBar()
         }
-        .fullScreenCover(isPresented: $store.isPlayerExpanded) {
-            PlayerView().themed()
+        // 播放页用悬浮层而不是 fullScreenCover：收起时底层界面必须可见，
+        // 播放页才能像 YouTube 那样缩成小卡片落到底部播放条上。
+        .overlay {
+            if store.isPlayerExpanded {
+                PlayerView(collapse: $playerCollapse).themed()
+            }
         }
         .sheet(isPresented: $ui.showImport) {
             ImportSheet().themed()

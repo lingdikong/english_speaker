@@ -1,6 +1,6 @@
 <script lang="ts">
-  // 首页（UI_SPEC §5 / §4.3）：继续收听 + 最近添加；空资料库时显示品牌图形 + “导入第一篇文章”。
-  import { store, locate } from '../lib/store.svelte';
+  // 首页（UI_SPEC §5 / §4.3）：继续收听（固定尺寸方格横向列表）+ 最近添加；空资料库时显示品牌图形 + “导入第一篇文章”。
+  import { store } from '../lib/store.svelte';
   import { PLAY, PAUSE } from '../lib/icons';
   import Thumb from './Thumb.svelte';
   import Brand from './Brand.svelte';
@@ -9,30 +9,19 @@
 
   const recent = $derived([...store.articles].sort((a, b) => b.created_at_ms - a.created_at_ms).slice(0, 8));
 
-  /** 继续收听：正在播放的文章，否则最近一篇有进度且未听完的文章。 */
-  const cont = $derived.by(() => {
-    if (store.current) return store.current;
-    return (
-      [...store.articles]
-        .filter((a) => (a.progress_ms ?? 0) > 0 && (!a.duration_ms || (a.progress_ms ?? 0) < a.duration_ms - 1000))
-        .sort((a, b) => (b.progress_ms ?? 0) - (a.progress_ms ?? 0))[0] ?? null
-    );
-  });
-  const isCur = $derived(cont != null && cont.id === store.player.article_id);
-
-  $effect(() => {
-    if (cont && !store.timelines[cont.id]) store.loadTimeline(cont.id);
-  });
-
-  const info = $derived.by(() => {
-    if (!cont) return null;
-    const pos = isCur ? store.position : (cont.progress_ms ?? 0);
-    const dur = Math.max(1, isCur ? store.duration : cont.duration_ms || (store.details[cont.id]?.estimated_ms ?? 0));
-    const t = store.timelines[cont.id] ?? null;
-    const s = isCur ? store.located.sentence : locate(t, pos, null).sentence;
-    const total = t?.sentences.length ?? cont.total_sentences;
-    const left = Math.max(0, Math.ceil((dur - pos) / 60000));
-    return { frac: Math.min(1, pos / dur), text: `第 ${(s ?? 0) + 1}/${total} 句 · 剩余 ${left} 分钟` };
+  /** 继续收听列表：当前播放的排最前，其余按进度新到旧，最多 12 格。 */
+  const conts = $derived.by(() => {
+    const cur = store.current;
+    const rest = store.articles
+      .filter(
+        (a) =>
+          a.id !== cur?.id &&
+          (a.progress_ms ?? 0) > 0 &&
+          (!a.duration_ms || (a.progress_ms ?? 0) < a.duration_ms - 1000),
+      )
+      .sort((a, b) => (b.progress_ms ?? 0) - (a.progress_ms ?? 0))
+      .slice(0, 12);
+    return cur ? [cur, ...rest] : rest;
   });
 </script>
 
@@ -49,26 +38,29 @@
     <button class="play row imp" onclick={() => (store.importOpen = true)}><Icon name="plus" size={16} stroke={2.4} />导入第一篇文章</button>
   </div>
 {:else}
-  {#if cont && info}
-    <section class="panel cont">
-      <div class="label">继续收听</div>
-      <div class="row" style="gap:14px">
-        <Thumb title={cont.title} size={72} />
-        <div class="meta">
-          <div class="ct">{cont.title}</div>
-          <div class="cs">{info.text}</div>
-        </div>
-        <button
-          class="play"
-          style="width:48px;height:48px"
-          aria-label={isCur && store.active ? '暂停' : '继续播放'}
-          onclick={() => (isCur ? store.toggle() : store.play(cont.id))}
-        >
-          {#if isCur && store.player.status === 'buffering'}<span class="spinner" style="border-color:color-mix(in srgb,var(--accent-ink) 30%,transparent);border-top-color:var(--accent-ink)"></span>
-          {:else}{@html isCur && store.active ? PAUSE(20) : PLAY(20)}{/if}
-        </button>
+  {#if conts.length}
+    <section>
+      <div class="row sh">
+        <h2 class="h2">继续收听</h2>
       </div>
-      <div class="bar"><b style:width="{info.frac * 100}%"></b></div>
+      <div class="grid">
+        {#each conts as a (a.id)}
+          {@const cur = a.id === store.player.article_id}
+          {@const pos = cur ? store.position : (a.progress_ms ?? 0)}
+          {@const dur = Math.max(1, cur ? store.duration : a.duration_ms || store.details[a.id]?.estimated_ms || 0)}
+          {@const left = Math.max(0, Math.ceil((dur - pos) / 60000))}
+          <button class="tile" class:on={cur} onclick={() => (cur ? store.toggle() : store.play(a.id))}>
+            <Thumb title={a.title} size={56} />
+            <div class="tt">{a.title}</div>
+            <div class="ts">{left > 0 ? `剩余 ${left} 分钟` : '即将听完'}</div>
+            <div class="bar"><b style:width="{Math.min(1, pos / dur) * 100}%"></b></div>
+            <span class="pplay" aria-hidden="true">
+              {#if cur && store.player.status === 'buffering'}<span class="spinner" style="border-color:color-mix(in srgb,var(--accent-ink) 30%,transparent);border-top-color:var(--accent-ink)"></span>
+              {:else}{@html cur && store.active ? PAUSE(20) : PLAY(20)}{/if}
+            </span>
+          </button>
+        {/each}
+      </div>
     </section>
   {/if}
 
@@ -92,34 +84,58 @@
     font-weight: 700;
     font-size: 14px;
   }
-  .cont {
-    padding: 16px;
-    border-radius: 22px;
+  /* 继续收听：固定尺寸方格，横向从左到右排列，放不下时横向滚动 */
+  .grid {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 172px;
+    gap: 14px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .grid::-webkit-scrollbar {
+    display: none;
+  }
+  .tile {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 20px;
+    background: var(--card);
+    box-shadow: inset 0 0 0 1px var(--line);
+    padding: 18px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    max-width: 720px;
-  }
-  .meta {
-    flex: 1;
-    min-width: 0;
-  }
-  .ct {
-    font-family: var(--display);
-    font-weight: 700;
-    font-size: 18px;
-    line-height: 22px;
-    letter-spacing: -0.02em;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    text-align: center;
   }
-  .cs {
-    font-size: 13px;
+  .tile:hover {
+    box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
+  .tile.on {
+    box-shadow: inset 0 0 0 1.5px var(--accent);
+    background: var(--accent-soft);
+  }
+  .tt {
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 18px;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
+  .ts {
+    font-size: 12px;
     color: var(--t2);
-    margin-top: 4px;
   }
   .bar {
+    width: 100%;
     height: 4px;
     border-radius: 2px;
     background: var(--wave-e);
@@ -129,6 +145,27 @@
     height: 4px;
     border-radius: 2px;
     background: var(--accent);
+  }
+  /* 悬停时居中的播放/暂停浮层 */
+  .pplay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--bg) 35%, transparent);
+    color: var(--accent-text);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .pplay :global(svg) {
+    padding: 12px;
+    box-sizing: content-box;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  .tile:hover .pplay {
+    opacity: 1;
   }
   .sh {
     justify-content: space-between;

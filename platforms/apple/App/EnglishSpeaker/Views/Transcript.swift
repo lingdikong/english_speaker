@@ -49,7 +49,7 @@ struct AnnotatedSentence: View {
             guard let c = currentWord else { return 1 }
             return i < c ? -1 : (i == c ? 0 : 1)
         }()
-        let weak = annotations && word.weakForm != nil && state != 0
+        let weak = annotations && word.weakForm != nil
         let dotted = annotations && (word.flap || word.elided || word.link == .flap || word.link == .assimilation)
         let color: Color = switch state {
         case -1: weak ? p.t2 : p.t1
@@ -68,11 +68,13 @@ struct AnnotatedSentence: View {
                         .offset(y: 1)
                 }
             }
-            .padding(.horizontal, state == 0 ? 6 : 0)
-            .padding(.vertical, state == 0 ? 1 : 0)
+            // 胶囊只作背景向外扩张，不改变占位尺寸——否则命中词会变宽，TokenFlow 重新换行导致整段跳动。
             .background {
                 if state == 0 {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous).fill(p.accentSoft)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(p.accentSoft)
+                        .padding(.horizontal, -6)
+                        .padding(.vertical, -1)
                 }
             }
             .contentShape(Rectangle())

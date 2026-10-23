@@ -2,14 +2,10 @@ package app.englishspeaker.ui
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,13 +15,15 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -38,6 +36,7 @@ import app.englishspeaker.ui.components.fadeTop
 import app.englishspeaker.ui.home.HomeScreen
 import app.englishspeaker.ui.importer.ImportSheet
 import app.englishspeaker.ui.library.LibraryScreen
+import app.englishspeaker.ui.player.PlayerMorph
 import app.englishspeaker.ui.player.PlayerScreen
 import app.englishspeaker.ui.player.ReadingSettingsSheet
 import app.englishspeaker.ui.player.UpNextSheet
@@ -77,7 +76,11 @@ fun AppRoot(vm: AppViewModel) {
         WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !p.dark
         WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !p.dark
     }
-    BackHandler(vm.playerOpen) { vm.playerOpen = false }
+    // 播放页收起进度：0 = 全屏，1 = 已收进底部小球。放在这里而不是播放页内部，
+    // 是为了让它跨“打开/关闭”存活，并且底层界面能跟着一起放大回来。
+    val collapse = remember { Animatable(1f) }
+    val collapseVal by collapse.asState()
+    BackHandler(vm.playerOpen) { vm.requestCollapse() }
 
     // 底部离手势条 26；三键导航时放到导航栏之上
     val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -93,6 +96,13 @@ fun AppRoot(vm: AppViewModel) {
             Box(
                 Modifier
                     .fillMaxSize()
+                    // 底层界面随播放页收起同步放大回来（与 iOS RootView 一致）：
+                    // 播放页缩小时后面露出的不是黑底，而是正常界面
+                    .graphicsLayer {
+                        val s = 0.94f + 0.06f * (1f - collapseVal)
+                        scaleX = s
+                        scaleY = s
+                    }
                     .hazeSource(haze)
                     .fadeUnder(FadeStops.m, FadeStops.m1, fadeT, extraBottom = base - Bar.bottom)
                     // 滚动内容在状态栏下渐隐：状态栏区域完全透明，其下 24dp 渐变
@@ -128,12 +138,19 @@ fun AppRoot(vm: AppViewModel) {
                 onNext = { repo.nextSentence() },
             )
 
-            AnimatedVisibility(
-                vm.playerOpen && current != null,
-                enter = if (reduce) fadeIn(tween(0)) else slideInVertically(tween(320)) { it / 4 } + fadeIn(tween(220)),
-                exit = if (reduce) fadeOut(tween(0)) else slideOutVertically(tween(260)) { it / 4 } + fadeOut(tween(200)),
-            ) {
-                if (current != null) PlayerScreen(vm, current)
+            // 播放页不再用 AnimatedVisibility 滑入滑出：收起/展开由 PlayerMorph 的
+            // “整页缩回底部小球”统一负责（与 iOS 一致），滑入动画会和它打架。
+            if (vm.playerOpen && current != null) {
+                PlayerMorph(
+                    vm = vm,
+                    collapse = collapse,
+                    barState = vm.bar,
+                    base = base,
+                    ballSize = Bar.height,
+                    onDismiss = { vm.playerOpen = false },
+                ) {
+                    PlayerScreen(vm, current)
+                }
             }
 
             if (vm.showImport) ImportSheet(vm) { vm.showImport = false }

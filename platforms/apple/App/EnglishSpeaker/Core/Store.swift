@@ -141,8 +141,18 @@ final class Store {
                 reloadTimeline()
             }
             nowPlaying?.update()
+            syncAudioSession(for: state.status)
             if ended {
                 if let l = loopSentence { seekSentence(l); core?.play() } else { advanceQueue() }
+                // 播完且没有自动接下一篇：延迟一点确认仍是 ended 再释放硬件
+                // （立刻释放会打断 advanceQueue 的连播）
+                Task { [weak self] in
+                    try? await Task.sleep(for: .milliseconds(600))
+                    guard let self, self.player.status == .ended else { return }
+                    let sink = self.sink
+                    DispatchQueue.global(qos: .utility).async { sink.suspend() }
+                    self.nowPlaying?.update()
+                }
             }
         case let .playerPosition(pos, buffered, s, w):
             positionMs = pos
@@ -254,7 +264,11 @@ final class Store {
     func play(_ id: String, context: [ArticleSummary]? = nil) {
         guard let core else { return }
         if id == player.articleId {
-            if !isPlaying { core.play() }
+            if !isPlaying {
+                AudioSessionController.shared.activate()
+                player.status = .buffering
+                core.play()
+            }
             return
         }
         if let context, let i = context.firstIndex(where: { $0.id == id }) {
@@ -262,6 +276,8 @@ final class Store {
         } else {
             upNext.removeAll { $0 == id }
         }
+        AudioSessionController.shared.activate()
+        player.status = .buffering   // 图标立刻切成暂停态，不等核心带回真实状态
         do { try core.playArticle(id: id) } catch { NSLog("[store] play failed: \(error)") }
     }
 
@@ -270,13 +286,38 @@ final class Store {
         if player.articleId == nil, let first = articles.first {
             play(first.id, context: articles)
         } else if isPlaying {
-            core.pause()
+            pause()
         } else {
+            AudioSessionController.shared.activate()
+            // 同上：先切成缓冲中，图标立刻响应，不等核心的事件往返
+            if player.articleId != nil { player.status = .buffering }
             core.play()
         }
     }
 
-    func pause() { core?.pause() }
+    func pause() {
+        guard let core else { return }
+        // 乐观更新：核心是异步的（命令投递 → player 线程处理 → 事件回调主线程），
+        // 等状态事件回来图标才切会慢一拍，这里点了就立刻变。
+        if isPlaying { player.status = .paused }
+        core.pause()
+    }
+
+    /// 不播放时把音频硬件还回去。
+    ///
+    /// 会话一旦 setActive(true) 就再没停过，系统会一直把本 App 当作“正在播放音频的
+    /// App”：灵动岛的播放指示器常驻、退到后台后 App 不挂起、锁屏媒体控件不下线。
+    /// 暂停时停引擎 + 停用会话即可消除；恢复播放时（resume / play）会重新激活。
+    private func syncAudioSession(for status: PlayerStatus) {
+        if status == .playing || status == .buffering {
+            AudioSessionController.shared.activate()
+        } else if status == .paused {
+            // 停用会话要等硬件释放、engine.stop 也要拆掉整条渲染链，加起来可达上百毫秒。
+            // 必须在后台线程做：在主线程同步执行会卡住 UI，表现为点完暂停图标“慢一下”才变。
+            let sink = self.sink
+            DispatchQueue.global(qos: .userInitiated).async { sink.suspend() }
+        }
+    }
 
     /// 播放底部栏 / 继续收听卡片上的文章。
     func playOrToggle(_ id: String) {
@@ -287,6 +328,7 @@ final class Store {
     func playSpan(startMs: UInt64, endMs: UInt64) {
         seek(to: startMs)
         stopAtMs = endMs
+        AudioSessionController.shared.activate()
         core?.play()
     }
 
@@ -307,7 +349,12 @@ final class Store {
         reloadLibrary()
         return n
     }
-    func resume() { core?.play() }
+    /// 恢复播放。锁屏/控制中心点播放时会话可能已被停用（见 syncAudioSession），先激活。
+    func resume() {
+        AudioSessionController.shared.activate()
+        if player.articleId != nil { player.status = .buffering }
+        core?.play()
+    }
 
     func seek(to ms: UInt64) {
         core?.seek(positionMs: ms)

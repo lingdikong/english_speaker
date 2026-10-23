@@ -117,7 +117,9 @@ fun PlayerScreen(vm: AppViewModel, a: ArticleSummary) {
     }
     BackHandler(focused) { focused = false; vm.forceFocus = false; lastTouch = SystemClock.elapsedRealtime() }
     val chromeAlpha by animateFloatAsState(if (focused) 0f else 1f, fadeSpec(reduce, 250), label = "chrome")
-    val showAnn = annotations && !focused
+    // 专注模式只收起外壳（头部/控制面板），跟读标注（‿ 连读、弱读、点线）要保留 ——
+    // 与 iOS 一致：早先写成 annotations && !focused，专注模式下连读符号全没了。
+    val showAnn = annotations
 
     BoxWithConstraints(
         Modifier
@@ -181,7 +183,7 @@ fun PlayerScreen(vm: AppViewModel, a: ArticleSummary) {
         Column(Modifier.fillMaxWidth().padding(top = statusTop + 8.dp).graphicsLayer { alpha = chromeAlpha }) {
             var more by remember { mutableStateOf(false) }
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconBtn(Icons.line("down", 1.9f), "收起", iconSize = 24.dp, enabled = !focused) { vm.playerOpen = false }
+                IconBtn(Icons.line("down", 1.9f), "收起", iconSize = 24.dp, enabled = !focused) { vm.requestCollapse() }
                 val total = sentences.size
                 val cur = (pos.sentence ?: 0) + 1
                 Text(

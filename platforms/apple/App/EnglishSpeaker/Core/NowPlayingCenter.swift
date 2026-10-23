@@ -31,12 +31,20 @@ final class NowPlayingCenter {
         }
     }
 
+    /// 清空锁屏 / 控制中心 / 灵动岛上的播放信息。
+    /// 只要 nowPlayingInfo 还在，系统就会一直显示本 App 的播放指示器与媒体控件。
+    func clear() {
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
+        artwork = nil
+        artworkFor = nil
+        lastElapsedPush = .distantPast
+    }
+
     func update() {
-        guard let store, let a = store.current else {
-            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-            MPNowPlayingInfoCenter.default().playbackState = .stopped
-            return
-        }
+        guard let store, let a = store.current else { clear(); return }
+        // 播完 / 没加载文章：不该再占用灵动岛和锁屏控件
+        if store.player.status == .ended || store.player.status == .idle { clear(); return }
         if artworkFor != a.id, let image = CoverRenderer.image(title: a.title) {
             artworkFor = a.id
             artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
@@ -53,7 +61,14 @@ final class NowPlayingCenter {
         ]
         if let artwork { info[MPMediaItemPropertyArtwork] = artwork }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-        MPNowPlayingInfoCenter.default().playbackState = store.isPlaying ? .playing : .paused
+        // 必须是准确的状态：停在 .playing 的话，锁屏上会一直显示“正在播放”。
+        MPNowPlayingInfoCenter.default().playbackState = {
+            switch store.player.status {
+            case .playing, .buffering: return .playing
+            case .paused: return .paused
+            default: return .stopped
+            }
+        }()
         lastElapsedPush = Date()
     }
 

@@ -21,3 +21,4 @@ DerivedData/
 *.xcresult
 .DS_Store
 .env
+/dist

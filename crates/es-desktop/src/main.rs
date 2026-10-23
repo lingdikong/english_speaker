@@ -12,6 +12,12 @@
 //! 环境变量：`ES_DATA_DIR` 覆盖数据目录，`ES_MODEL_DIR` 指定模型目录，`ES_UI_DIR` 指定 UI 构建产物，
 //! `ES_CHROME` 指定开发宿主使用的浏览器。
 
+// Windows 发布包（启用 cef）双击启动时不弹控制台窗口；开发用的 CLI 子命令在未启用 cef 的构建里使用。
+#![cfg_attr(
+    all(windows, feature = "cef", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
+
 mod audio;
 mod bridge;
 #[cfg(feature = "cef")]

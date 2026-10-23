@@ -29,7 +29,7 @@ done
 NAME=es-desktop
 DISPLAY_NAME="English Speaker"
 BUNDLE_ID=app.englishspeaker.desktop
-VERSION=0.1.0
+VERSION="${ES_VERSION:-0.1.0}"
 
 # 1. Web UI
 ( cd "$ROOT/ui/web" && { [[ -d node_modules ]] || npm ci; } && npm run build )

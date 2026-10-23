@@ -1,0 +1,136 @@
+name: release
+
+# 推送 v* 标签（如 v0.2.0）→ 构建 Android APK 与 macOS / Windows / Linux 桌面包 → 冒烟测试 → 发布 GitHub Release（预览版）。
+# 手动运行（Actions → release → Run workflow）只构建并上传产物，不发布，用于发版前试跑。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "试跑用的版本号"
+        default: "0.0.0-dev"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Version
+        run: echo "VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+      - run: ./scripts/build-android.sh
+      # 可选正式签名：在仓库 Secrets 中配置 ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD /
+      # ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD；未配置时使用 debug 签名（预览版）。
+      - name: Signing key
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "ES_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+      - name: Build APK
+        working-directory: platforms/android
+        env:
+          ES_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ES_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ES_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon :app:assembleRelease -PesVersionName="$VERSION" -PesVersionCode="${{ github.run_number }}"
+      - name: Collect
+        run: |
+          mkdir -p dist
+          cp platforms/android/app/build/outputs/apk/release/app-release.apk "dist/EnglishSpeaker-$VERSION-android.apk"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: android
+          path: dist/*.apk
+          if-no-files-found: error
+
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Version
+        run: echo "VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+      # CEF 的 C++ 包装层用 CMake + Ninja 构建
+      - run: pip install ninja
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config xvfb \
+            libnss3 libgbm1 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libatk-bridge2.0-0 libcups2
+      - name: Package
+        run: ./scripts/package-desktop.sh -o dist
+      - name: Smoke test
+        run: |
+          APP="$(cat dist/APP_PATH)"
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            xvfb-run -a ./scripts/smoke-desktop.sh "$APP" 180
+          else
+            ./scripts/smoke-desktop.sh "$APP" 180
+          fi
+      - uses: actions/upload-artifact@v5
+        with:
+          name: desktop-${{ runner.os }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: [android, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes
+        run: |
+          V="${VERSION#v}"
+          cat > notes.md <<EOF
+          > **预览版**：安装包未经代码签名。English Speaker 完全离线运行，语音模型（Kokoro-82M）已包含在安装包内。
+
+          | 平台 | 文件 | 安装 |
+          |---|---|---|
+          | Android 8.0+ | \`EnglishSpeaker-$V-android.apk\` | 下载后直接安装，需允许“安装未知应用” |
+          | macOS 13.4+（Apple 芯片） | \`EnglishSpeaker-$V-macos-aarch64.dmg\` | 把 English Speaker 拖到“应用程序”；首次打开请右键 →“打开” |
+          | Windows 10+（x64） | \`EnglishSpeaker-$V-windows-x86_64.zip\` | 解压后运行 \`EnglishSpeaker\\es-desktop.exe\`；SmartScreen 提示时选“仍要运行” |
+          | Linux（x64） | \`EnglishSpeaker-$V-linux-x86_64.tar.gz\` | 解压后运行 \`EnglishSpeaker/es-desktop\`（需要 libnss3、libgbm1 等 Chromium 运行库） |
+
+          iOS 版需要通过 App Store / TestFlight 分发，暂未包含。
+          EOF
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "English Speaker ${GITHUB_REF_NAME}" \
+            --prerelease --notes-file notes.md --generate-notes

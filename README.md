@@ -65,6 +65,12 @@ Windows · macOS · Linux · iOS · Android
 
 详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)；界面规范见 [docs/UI_SPEC.md](docs/UI_SPEC.md)，设计稿用浏览器打开 [docs/design/visual-v2.html](docs/design/visual-v2.html)。
 
+## 下载
+
+到 [Releases](https://github.com/lingdikong/english_speaker/releases) 下载安装包：Android APK、macOS（Apple 芯片）DMG、Windows / Linux 压缩包。语音模型已包含在安装包内，装好即可离线使用。当前为**预览版**，安装包未经代码签名，安装方法见每个版本的说明。
+
+发布新版本：推送 `v*` 标签（如 `git tag v0.2.0 && git push origin v0.2.0`），[release 工作流](.github/workflows/release.yml) 会自动构建、冒烟测试并发布。
+
 ## 快速开始
 
 需要：Rust 1.88+；iOS 需要 Xcode 16+ 与 [xcodegen](https://github.com/yonaskolb/XcodeGen)；Android 需要 Android SDK/NDK 与 `cargo-ndk`；桌面 Web 界面需要 Node.js 20+。

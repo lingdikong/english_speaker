@@ -14,15 +14,30 @@ android {
         applicationId = "app.englishspeaker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // 发布时由 CI 传入：-PesVersionName=0.2.0 -PesVersionCode=<run number>
+        versionCode = (findProperty("esVersionCode") as String?)?.toInt() ?: 1
+        versionName = (findProperty("esVersionName") as String?) ?: "0.1.0"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+    }
+
+    // 正式签名：设置 ES_KEYSTORE（路径）、ES_KEYSTORE_PASSWORD、ES_KEY_ALIAS、ES_KEY_PASSWORD 后启用；
+    // 未设置时 release 包使用 debug 签名（预览版）。
+    val releaseKeystore = System.getenv("ES_KEYSTORE")?.let(::file)?.takeIf { it.isFile }
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("ES_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ES_KEY_ALIAS")
+                keyPassword = System.getenv("ES_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 

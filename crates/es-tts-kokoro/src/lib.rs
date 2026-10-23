@@ -122,8 +122,10 @@ impl KokoroEngine {
             styles.insert(
                 id.to_string(),
                 bytes
-                    .chunks_exact(4)
-                    .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|&b| f32::from_le_bytes(b))
                     .collect(),
             );
             voices.push(Voice {
@@ -191,10 +193,7 @@ impl KokoroEngine {
 
 impl Runtime {
     fn load(root: &Path, options: &KokoroOptions) -> Result<Self> {
-        let env = ort::init()
-            .with_name("english-speaker")
-            .build()
-            .map_err(engine_err)?;
+        let env = shared_env()?;
         let session = build_session(&env, &root.join(MODEL_FILE), options)?;
         let inputs: Vec<String> = session
             .inputs()
@@ -305,6 +304,22 @@ impl Runtime {
             .map_err(engine_err)?;
         Ok(wave.to_vec())
     }
+}
+
+/// ONNX Runtime 每个进程只允许建一次环境（ort 用只写一次的全局记录，
+/// 即使旧环境已释放也不能再建），所以全进程共用一个，并且永不释放。
+fn shared_env() -> Result<ort::environment::Environment> {
+    static ENV: Mutex<Option<ort::environment::Environment>> = Mutex::new(None);
+    let mut slot = ENV.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(env) = slot.as_ref() {
+        return Ok(env.clone());
+    }
+    let env = ort::init()
+        .with_name("english-speaker")
+        .build()
+        .map_err(engine_err)?;
+    *slot = Some(env.clone());
+    Ok(env)
 }
 
 fn build_session(

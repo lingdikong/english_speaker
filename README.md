@@ -67,7 +67,7 @@ Windows · macOS · Linux · iOS · Android
 
 ## 快速开始
 
-需要：Rust 1.86+；iOS 需要 Xcode 16+ 与 [xcodegen](https://github.com/yonaskolb/XcodeGen)；Android 需要 Android SDK/NDK 与 `cargo-ndk`；桌面 Web 界面需要 Node.js 20+。
+需要：Rust 1.88+；iOS 需要 Xcode 16+ 与 [xcodegen](https://github.com/yonaskolb/XcodeGen)；Android 需要 Android SDK/NDK 与 `cargo-ndk`；桌面 Web 界面需要 Node.js 20+。
 
 ```bash
 git clone https://github.com/lingdikong/english_speaker.git

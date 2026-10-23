@@ -170,3 +170,29 @@ fn connected_speech_annotation_on_real_phonemes() {
     assert!(!check("water", true)[0].flap, "英式没有闪音");
     assert_eq!(check("far away", true)[0].link, Some(LinkingR));
 }
+
+#[test]
+fn engines_can_be_reloaded_and_loaded_concurrently() {
+    // 模型在后台线程加载，错误要到第一次合成才会出现，所以每个引擎都实际合成一句。
+    fn speak(engine: &KokoroEngine) {
+        let plan = text::plan("Hi there.");
+        let words = plan[0].spoken_words();
+        engine
+            .synthesize(&SynthRequest {
+                text: &plan[0].spoken(),
+                words: &words,
+                voice_id: "af_heart",
+                speed: 1.0,
+            })
+            .expect("synthesize");
+    }
+    let Some(first) = engine() else { return };
+    speak(&first);
+    drop(first);
+    let again: Vec<_> = (0..2)
+        .map(|_| std::thread::spawn(|| engine().map(|e| speak(&e))))
+        .collect();
+    for h in again {
+        h.join().expect("reload after drop / concurrent load");
+    }
+}

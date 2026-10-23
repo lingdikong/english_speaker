@@ -23,6 +23,7 @@ cargo run -q -p es-ffi --features bindgen --bin uniffi-bindgen -- generate \
   --language swift --out-dir "$WORK/bindings"
 cp "$WORK/bindings/SpeakerCoreFFI.h" "$WORK/headers/"
 cp "$WORK/bindings/SpeakerCoreFFI.modulemap" "$WORK/headers/module.modulemap"
+mkdir -p "$PKG/Sources/SpeakerCore"
 cp "$WORK/bindings/SpeakerCore.swift" "$PKG/Sources/SpeakerCore/SpeakerCore.swift"
 
 rm -rf "$PKG/SpeakerCoreFFI.xcframework"

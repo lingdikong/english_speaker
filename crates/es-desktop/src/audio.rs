@@ -175,8 +175,11 @@ impl AudioSink for CpalSink {
         b.consumed = 0;
         if let Some(src) = b.src {
             b.resampler = Resampler::new(src.sample_rate, b.dev_rate, src.channels);
-            b.stretcher =
-                Stretcher::new(src.channels as usize, src.sample_rate, self.shared.rate() as f64);
+            b.stretcher = Stretcher::new(
+                src.channels as usize,
+                src.sample_rate,
+                self.shared.rate() as f64,
+            );
         }
         self.shared.cv.notify_all();
     }
@@ -197,7 +200,12 @@ impl AudioSink for CpalSink {
         // WSOLA 时间伸缩在 sink 内实现，任意倍速都支持
         let rate = rate.clamp(0.5, 2.0);
         self.shared.set_rate(rate);
-        self.shared.buf.lock().unwrap().stretcher.set_rate(rate as f64);
+        self.shared
+            .buf
+            .lock()
+            .unwrap()
+            .stretcher
+            .set_rate(rate as f64);
         true
     }
 
@@ -400,7 +408,9 @@ impl Default for Stretcher {
 
 impl Stretcher {
     fn new(channels: usize, src_rate: u32, rate: f64) -> Self {
-        let n = (((src_rate as f64) * 0.040).round() as usize).max(2).next_power_of_two();
+        let n = (((src_rate as f64) * 0.040).round() as usize)
+            .max(2)
+            .next_power_of_two();
         let win: Vec<f32> = (0..n)
             .map(|i| 0.5 * (1.0 - (std::f64::consts::TAU * i as f64 / n as f64).cos()) as f32)
             .collect();
@@ -512,7 +522,11 @@ impl Stretcher {
         for i in 0..self.n {
             let w = self.win[i];
             for c in 0..ch {
-                let v = if i < take { self.buf[(base + i) * ch + c] * w } else { 0.0 };
+                let v = if i < take {
+                    self.buf[(base + i) * ch + c] * w
+                } else {
+                    0.0
+                };
                 if i < self.h {
                     out.push(v + self.tail[i * ch + c]);
                 } else {
@@ -524,7 +538,10 @@ impl Stretcher {
         // 按理论总输出补齐静音（慢速时结尾差量通常 < 一个窗长）
         let target = (self.fed as f64 / self.rate).ceil() as u64;
         if self.emitted < target {
-            out.extend(std::iter::repeat_n(0.0, ((target - self.emitted) as usize) * ch));
+            out.extend(std::iter::repeat_n(
+                0.0,
+                ((target - self.emitted) as usize) * ch,
+            ));
             self.emitted = target;
         }
         self.reset();
@@ -660,7 +677,9 @@ mod tests {
         s.flush_end(&mut out);
         // 开头 h 帧是第一个窗的淡入（无前窗交叠），结尾是收尾窗，均不在检查范围
         let body = &out[s.h..out.len() * 3 / 4];
-        let (lo, hi) = body.iter().fold((f32::MAX, f32::MIN), |(a, b), &v| (a.min(v), b.max(v)));
+        let (lo, hi) = body
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(a, b), &v| (a.min(v), b.max(v)));
         assert!(lo > 0.42 && hi < 0.58, "level [{lo}, {hi}]");
     }
 

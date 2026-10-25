@@ -244,12 +244,15 @@ impl Worker {
             // 结尾兜底：残留尾部已冲出、位置却长时间不再前进，
             // 说明平台 sink 的帧数统计差一点永远追不上（舍入 / 内部缓冲），
             // 此时无声空转，直接判定放完，避免卡在播放状态。
-            let stalled = self.end_flushed
-                && self.last_advance.is_some_and(|t| t.elapsed() >= END_STALL);
+            let stalled =
+                self.end_flushed && self.last_advance.is_some_and(|t| t.elapsed() >= END_STALL);
             if !stalled {
                 return Ok(()); // sink 里还有没放完的
             }
-            log::debug!("end-of-stream stall: played {played} / written {}", l.written);
+            log::debug!(
+                "end-of-stream stall: played {played} / written {}",
+                l.written
+            );
         }
         if l.complete {
             let id = l.article_id.clone();

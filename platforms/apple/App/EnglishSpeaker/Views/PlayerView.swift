@@ -375,6 +375,7 @@ private struct TranscriptScroll: View {
         let sentences = store.timeline?.sentences ?? []
         let current = store.sentence ?? 0
         let liveWord = frozen ? frozenWord : store.word
+        let bilingual = store.bilingual && store.canTranslate
         ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 22) {
@@ -382,16 +383,24 @@ private struct TranscriptScroll: View {
                     ForEach(sentences, id: \.index) { s in
                         let i = Int(s.index)
                         Group {
+                            let zh = bilingual ? store.translations[i]?.text : nil
                             if i == current && s.ready {
-                                CurrentSentenceCard(sentence: s,
-                                                    currentWord: store.player.status == .ended ? Int.max : liveWord,
-                                                    annotations: prefs.showAnnotations,
-                                                    showChips: !focus,
-                                                    size: prefs.fontSize, lineHeight: prefs.currentLineHeight,
-                                                    onTapWord: { w in onTapWord(i, w) })
+                                VStack(alignment: .leading, spacing: 10) {
+                                    CurrentSentenceCard(sentence: s,
+                                                        currentWord: store.player.status == .ended ? Int.max : liveWord,
+                                                        annotations: prefs.showAnnotations,
+                                                        showChips: !focus,
+                                                        size: prefs.fontSize, lineHeight: prefs.currentLineHeight,
+                                                        translation: bilingual ? .some(zh) : nil,
+                                                        onTapWord: { w in onTapWord(i, w) })
+                                    if store.smartReady && !focus { SentenceAnalysisPanel(sentence: i) }
+                                }
                             } else {
-                                PlainSentence(text: s.text, ready: s.ready, size: prefs.otherSize,
-                                              lineHeight: prefs.otherLineHeight)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    PlainSentence(text: s.text, ready: s.ready, size: prefs.otherSize,
+                                                  lineHeight: prefs.otherLineHeight)
+                                    if bilingual { TranslationLine(text: zh) }
+                                }
                                     .contentShape(Rectangle())
                                     .onTapGesture {
                                         onInteract()
@@ -543,6 +552,16 @@ private struct ControlPanel: View {
             }
             .buttonStyle(PressStyle())
             .accessibilityValue(prefs.showAnnotations ? "开" : "关")
+            if store.canTranslate {
+                Button { onInteract(); store.bilingual.toggle() } label: {
+                    Chip(kind: store.bilingual ? .accent : .muted, height: 36) {
+                        IconView(.translate, size: 16, weight: 1.9)
+                        Text("双语")
+                    }
+                }
+                .buttonStyle(PressStyle())
+                .accessibilityValue(store.bilingual ? "开" : "关")
+            }
             Spacer()
             Button { onInteract(); showReading = true } label: {
                 Chip(kind: .muted, height: 36) {

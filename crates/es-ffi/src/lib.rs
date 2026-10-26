@@ -200,6 +200,135 @@ pub struct CacheStats {
     pub entries: u32,
 }
 
+// —— 翻译与查词 ——
+
+/// 整句翻译引擎：Fast = 机器翻译（内置），Smart = 本地大模型（按需下载）。
+#[derive(uniffi::Enum)]
+pub enum TranslationEngine {
+    Fast,
+    Smart,
+}
+
+#[derive(uniffi::Record)]
+pub struct SentenceTranslation {
+    pub index: u32,
+    pub text: String,
+    pub engine: TranslationEngine,
+}
+
+#[derive(uniffi::Record)]
+pub struct DictSense {
+    /// `n.` / `vt.` / `[计]`；可为空。
+    pub pos: String,
+    pub meaning: String,
+}
+
+#[derive(uniffi::Record)]
+pub struct WordForm {
+    /// 过去式 / 复数 等。
+    pub kind: String,
+    pub word: String,
+}
+
+/// 离线词典查词结果。
+#[derive(uniffi::Record)]
+pub struct DictEntry {
+    /// 词条原形。
+    pub word: String,
+    /// 用户点的词。
+    pub query: String,
+    /// `query` 是原形的哪种变形（“过去式”）；就是原形时为空。
+    pub inflection: Option<String>,
+    /// IPA（不含斜杠），可为空。
+    pub phonetic: String,
+    pub senses: Vec<DictSense>,
+    /// 四级 / 六级 / 雅思 …
+    pub tags: Vec<String>,
+    pub collins: u8,
+    pub oxford: bool,
+    pub frequency: Option<u32>,
+    pub forms: Vec<WordForm>,
+}
+
+#[derive(uniffi::Record)]
+pub struct ExampleSentence {
+    pub en: String,
+    pub zh: String,
+}
+
+/// 点词“举一反三”（智能模式）。
+#[derive(uniffi::Record)]
+pub struct WordInsight {
+    pub word: String,
+    pub pos: String,
+    /// 在这句里的意思。
+    pub meaning: String,
+    pub collocations: Vec<String>,
+    pub examples: Vec<ExampleSentence>,
+}
+
+#[derive(uniffi::Record)]
+pub struct GrammarPoint {
+    pub text: String,
+    pub note: String,
+}
+
+/// 句子解析（智能模式）。
+#[derive(uniffi::Record)]
+pub struct SentenceAnalysis {
+    pub translation: String,
+    pub structure: String,
+    pub points: Vec<GrammarPoint>,
+}
+
+#[derive(uniffi::Record)]
+pub struct GlossaryTerm {
+    pub term: String,
+    pub translation: String,
+    pub created_at_ms: i64,
+}
+
+/// 生词本条目。文章删除后 `article_id` / `sentence_index` 为空，例句保留。
+#[derive(uniffi::Record)]
+pub struct VocabEntry {
+    pub word: String,
+    pub phonetic: String,
+    pub meaning: String,
+    pub article_id: Option<String>,
+    pub article_title: Option<String>,
+    pub sentence_index: Option<u32>,
+    pub sentence: String,
+    pub added_at_ms: i64,
+}
+
+#[derive(uniffi::Enum)]
+pub enum LlmState {
+    NotDownloaded,
+    Downloading,
+    Downloaded,
+    Failed,
+}
+
+#[derive(uniffi::Record)]
+pub struct LlmStatus {
+    pub state: LlmState,
+    pub model_name: String,
+    pub downloaded_bytes: u64,
+    pub total_bytes: u64,
+    pub loaded: bool,
+    pub error: Option<String>,
+}
+
+#[derive(uniffi::Record)]
+pub struct TranslatorStatus {
+    pub dictionary: bool,
+    pub fast: bool,
+    pub smart_enabled: bool,
+    /// 整句翻译实际使用的引擎；都不可用时为空。
+    pub active: Option<TranslationEngine>,
+    pub llm: LlmStatus,
+}
+
 #[derive(uniffi::Enum)]
 pub enum SpeakerEvent {
     LibraryChanged,
@@ -229,6 +358,35 @@ pub enum SpeakerEvent {
         sentence: Option<u32>,
         word: Option<u32>,
     },
+    /// 一句译文就绪（后台预翻 / 智能精翻）。
+    TranslationProgress {
+        article_id: String,
+        translation: SentenceTranslation,
+        translated: u32,
+        total: u32,
+    },
+    /// 这篇译文被整体作废（术语表变化），需重新读取 `translations`。
+    TranslationsChanged {
+        article_id: String,
+    },
+    WordInsightReady {
+        article_id: String,
+        sentence: u32,
+        word: u32,
+        insight: Option<WordInsight>,
+        error: Option<String>,
+    },
+    SentenceAnalysisReady {
+        article_id: String,
+        sentence: u32,
+        analysis: Option<SentenceAnalysis>,
+        error: Option<String>,
+    },
+    /// 翻译模式 / 模型下载进度 / 加载状态变化。
+    TranslatorChanged {
+        status: TranslatorStatus,
+    },
+    VocabularyChanged,
 }
 
 // ---------- 平台实现的回调接口 ----------
@@ -410,6 +568,103 @@ impl SpeakerCore {
         Ok(self.inner.clear_cache()?)
     }
 
+    // —— 翻译与查词 ——
+
+    pub fn translator_status(&self) -> TranslatorStatus {
+        self.inner.translator_status().into()
+    }
+
+    /// 每句最多一条（智能精翻优先）；缺的句子之后经 `TranslationProgress` 送达。
+    pub fn translations(&self, id: String) -> Result<Vec<SentenceTranslation>> {
+        Ok(self
+            .inner
+            .translations(&id)?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    /// 用户正在看这篇（打开播放页 / 打开双语）：优先翻译，智能模式下逐句精翻。
+    pub fn prepare_translations(&self, id: String) -> Result<()> {
+        Ok(self.inner.prepare_translations(&id)?)
+    }
+
+    /// 离线词典查词（毫秒级）。
+    pub fn lookup_word(&self, word: String) -> Result<Option<DictEntry>> {
+        Ok(self.inner.lookup_word(&word)?.map(Into::into))
+    }
+
+    /// 有缓存直接返回；否则返回空并在后台生成（`WordInsightReady`）。智能模式不可用时报错。
+    pub fn word_insight(
+        &self,
+        id: String,
+        sentence: u32,
+        word: u32,
+    ) -> Result<Option<WordInsight>> {
+        Ok(self
+            .inner
+            .word_insight(&id, sentence, word)?
+            .map(Into::into))
+    }
+
+    /// 用法同 `word_insight`，结果经 `SentenceAnalysisReady` 送达。
+    pub fn sentence_analysis(&self, id: String, sentence: u32) -> Result<Option<SentenceAnalysis>> {
+        Ok(self.inner.sentence_analysis(&id, sentence)?.map(Into::into))
+    }
+
+    pub fn set_smart_translation(&self, enabled: bool) -> Result<()> {
+        Ok(self.inner.set_smart_translation(enabled)?)
+    }
+
+    /// 后台下载智能翻译模型（断点续传）。是否在蜂窝网络下载由平台判断并提示用户。
+    pub fn download_llm(&self) -> Result<()> {
+        Ok(self.inner.download_llm()?)
+    }
+
+    pub fn cancel_llm_download(&self) {
+        self.inner.cancel_llm_download()
+    }
+
+    pub fn delete_llm(&self) -> Result<()> {
+        Ok(self.inner.delete_llm()?)
+    }
+
+    pub fn list_glossary(&self) -> Result<Vec<GlossaryTerm>> {
+        Ok(self
+            .inner
+            .list_glossary()?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    /// 添加或修改术语（不区分大小写）；含该术语的句子会重新翻译。
+    pub fn add_glossary_term(&self, term: String, translation: String) -> Result<GlossaryTerm> {
+        Ok(self.inner.add_glossary_term(&term, &translation)?.into())
+    }
+
+    pub fn remove_glossary_term(&self, term: String) -> Result<()> {
+        Ok(self.inner.remove_glossary_term(&term)?)
+    }
+
+    pub fn list_vocab(&self) -> Result<Vec<VocabEntry>> {
+        Ok(self
+            .inner
+            .list_vocab()?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    /// 收藏第 `sentence` 句第 `word` 个词（按原形去重）。
+    pub fn add_vocab(&self, id: String, sentence: u32, word: u32) -> Result<VocabEntry> {
+        Ok(self.inner.add_vocab(&id, sentence, word)?.into())
+    }
+
+    pub fn remove_vocab(&self, word: String) -> Result<()> {
+        Ok(self.inner.remove_vocab(&word)?)
+    }
+
     // —— 播放 ——
 
     /// 未缓存完的文章会被提到合成队首，边听边转。
@@ -540,6 +795,48 @@ impl core::EventListener for ListenerAdapter {
                 sentence,
                 word,
             },
+            CoreEvent::TranslationProgress {
+                article_id,
+                translation,
+                translated,
+                total,
+            } => SpeakerEvent::TranslationProgress {
+                article_id,
+                translation: translation.into(),
+                translated,
+                total,
+            },
+            CoreEvent::TranslationsChanged { article_id } => {
+                SpeakerEvent::TranslationsChanged { article_id }
+            }
+            CoreEvent::WordInsightReady {
+                article_id,
+                sentence,
+                word,
+                insight,
+                error,
+            } => SpeakerEvent::WordInsightReady {
+                article_id,
+                sentence,
+                word,
+                insight: insight.map(Into::into),
+                error,
+            },
+            CoreEvent::SentenceAnalysisReady {
+                article_id,
+                sentence,
+                analysis,
+                error,
+            } => SpeakerEvent::SentenceAnalysisReady {
+                article_id,
+                sentence,
+                analysis: analysis.map(Into::into),
+                error,
+            },
+            CoreEvent::TranslatorChanged { status } => SpeakerEvent::TranslatorChanged {
+                status: status.into(),
+            },
+            CoreEvent::VocabularyChanged => SpeakerEvent::VocabularyChanged,
         };
         self.0.on_event(event);
     }
@@ -688,6 +985,138 @@ impl From<m::PlayerState> for PlayerState {
             duration_ms: s.duration_ms,
             duration_final: s.duration_final,
             rate: s.rate,
+        }
+    }
+}
+
+impl From<m::TranslationEngine> for TranslationEngine {
+    fn from(e: m::TranslationEngine) -> Self {
+        match e {
+            m::TranslationEngine::Fast => Self::Fast,
+            m::TranslationEngine::Smart => Self::Smart,
+        }
+    }
+}
+
+impl From<m::SentenceTranslation> for SentenceTranslation {
+    fn from(t: m::SentenceTranslation) -> Self {
+        Self {
+            index: t.index,
+            text: t.text,
+            engine: t.engine.into(),
+        }
+    }
+}
+
+impl From<m::DictEntry> for DictEntry {
+    fn from(d: m::DictEntry) -> Self {
+        Self {
+            word: d.word,
+            query: d.query,
+            inflection: d.inflection,
+            phonetic: d.phonetic,
+            senses: d
+                .senses
+                .into_iter()
+                .map(|s| DictSense {
+                    pos: s.pos,
+                    meaning: s.meaning,
+                })
+                .collect(),
+            tags: d.tags,
+            collins: d.collins,
+            oxford: d.oxford,
+            frequency: d.frequency,
+            forms: d
+                .forms
+                .into_iter()
+                .map(|f| WordForm {
+                    kind: f.kind,
+                    word: f.word,
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<m::WordInsight> for WordInsight {
+    fn from(w: m::WordInsight) -> Self {
+        Self {
+            word: w.word,
+            pos: w.pos,
+            meaning: w.meaning,
+            collocations: w.collocations,
+            examples: w
+                .examples
+                .into_iter()
+                .map(|e| ExampleSentence { en: e.en, zh: e.zh })
+                .collect(),
+        }
+    }
+}
+
+impl From<m::SentenceAnalysis> for SentenceAnalysis {
+    fn from(a: m::SentenceAnalysis) -> Self {
+        Self {
+            translation: a.translation,
+            structure: a.structure,
+            points: a
+                .points
+                .into_iter()
+                .map(|p| GrammarPoint {
+                    text: p.text,
+                    note: p.note,
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<m::GlossaryTerm> for GlossaryTerm {
+    fn from(t: m::GlossaryTerm) -> Self {
+        Self {
+            term: t.term,
+            translation: t.translation,
+            created_at_ms: t.created_at_ms,
+        }
+    }
+}
+
+impl From<m::VocabEntry> for VocabEntry {
+    fn from(v: m::VocabEntry) -> Self {
+        Self {
+            word: v.word,
+            phonetic: v.phonetic,
+            meaning: v.meaning,
+            article_id: v.article_id,
+            article_title: v.article_title,
+            sentence_index: v.sentence_index,
+            sentence: v.sentence,
+            added_at_ms: v.added_at_ms,
+        }
+    }
+}
+
+impl From<m::TranslatorStatus> for TranslatorStatus {
+    fn from(s: m::TranslatorStatus) -> Self {
+        Self {
+            dictionary: s.dictionary,
+            fast: s.fast,
+            smart_enabled: s.smart_enabled,
+            active: s.active.map(Into::into),
+            llm: LlmStatus {
+                state: match s.llm.state {
+                    m::LlmState::NotDownloaded => LlmState::NotDownloaded,
+                    m::LlmState::Downloading => LlmState::Downloading,
+                    m::LlmState::Downloaded => LlmState::Downloaded,
+                    m::LlmState::Failed => LlmState::Failed,
+                },
+                model_name: s.llm.model_name,
+                downloaded_bytes: s.llm.downloaded_bytes,
+                total_bytes: s.llm.total_bytes,
+                loaded: s.llm.loaded,
+                error: s.llm.error,
+            },
         }
     }
 }

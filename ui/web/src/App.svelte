@@ -8,6 +8,7 @@
   import ListPage from './components/ListPage.svelte';
   import CollectionPage from './components/CollectionPage.svelte';
   import Settings from './components/Settings.svelte';
+  import VocabPage from './components/VocabPage.svelte';
   import Player from './components/Player.svelte';
   import PlayerBar from './components/PlayerBar.svelte';
   import ImportDialog from './components/ImportDialog.svelte';
@@ -136,6 +137,8 @@
       {#if c}<CollectionPage {c} />{/if}
     {:else if store.view.kind === 'search'}
       <ListPage filter="all" search />
+    {:else if store.view.kind === 'vocab'}
+      <VocabPage />
     {:else if store.view.kind === 'settings'}
       <Settings />
     {/if}

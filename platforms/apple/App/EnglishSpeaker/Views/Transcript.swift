@@ -191,6 +191,8 @@ struct CurrentSentenceCard: View {
     var showChips = true
     var size: CGFloat = 24
     var lineHeight: CGFloat = 38
+    /// 双语模式下的译文：nil = 不显示；.some(nil) = 翻译中。
+    var translation: String?? = nil
     var onTapWord: ((Int) -> Void)?
     @Environment(\.palette) private var p
 
@@ -205,6 +207,7 @@ struct CurrentSentenceCard: View {
                 AnnotatedSentence(words: sentence.words, currentWord: currentWord, size: size,
                                   lineHeight: lineHeight, annotations: annotations, onTapWord: onTapWord)
             }
+            if let translation { TranslationLine(text: translation, current: true) }
             if annotations && showChips && (links > 0 || weaks > 0) {
                 HStack(spacing: 8) {
                     if links > 0 { Chip("\(links) 处连读", kind: .violet, height: 26, fontSize: 12) }

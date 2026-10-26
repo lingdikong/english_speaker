@@ -1,0 +1,30 @@
+[package]
+name = "es-translate"
+description = "Translation & dictionary engines for es-core: Opus-MT (ONNX), ECDICT (SQLite), Qwen (llama.cpp, optional)."
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = ["llm"]
+# 智能翻译：llama.cpp 推理 + 模型下载（HTTPS、断点续传、SHA-256 校验）。
+# 首次构建会用 cmake 编译 llama.cpp（约 3 分钟）。
+llm = ["dep:llama-cpp-2", "dep:ureq", "dep:sha2"]
+
+[dependencies]
+es-core.workspace = true
+es-onnx.workspace = true
+ort.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
+log.workspace = true
+llama-cpp-2 = { workspace = true, optional = true }
+ureq = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+
+# Apple：Metal 加速（iOS / macOS 都有 GPU）；其他平台用 CPU（ARM NEON / x86 AVX）
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+llama-cpp-2 = { workspace = true, optional = true, features = ["metal"] }
+
+# Android：llama.cpp 与 ONNX Runtime 共用 NDK 的 c++_shared（随 APK 分发）
+[target.'cfg(target_os = "android")'.dependencies]
+llama-cpp-2 = { workspace = true, optional = true, features = ["android-shared-stdcxx"] }

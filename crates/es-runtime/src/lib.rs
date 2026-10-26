@@ -9,8 +9,9 @@ use std::sync::Arc;
 use es_audio::PcmS16Codec;
 use es_core::ports::{AudioSink, TtsEngine};
 use es_core::testing::MockTtsEngine;
-use es_core::{AppConfig, AppCore, AppDeps, EventListener, Result};
+use es_core::{AppConfig, AppCore, AppDeps, EventListener, Result, TranslationDeps};
 use es_storage::SqliteStorage;
+use es_translate::{EcDict, OpusMt};
 use es_tts_kokoro::KokoroEngine;
 
 pub use es_core;
@@ -23,6 +24,8 @@ pub struct RuntimeConfig {
     pub default_voice: Option<String>,
     /// 缓存池默认上限；为空用核心默认值（1 GiB）。用户设置过则以数据库为准。
     pub cache_limit_bytes: Option<u64>,
+    /// 智能翻译模型的下载地址（自建镜像），按顺序尝试；为空用内置地址（ModelScope → HuggingFace）。
+    pub llm_urls: Vec<String>,
 }
 
 impl RuntimeConfig {
@@ -32,6 +35,7 @@ impl RuntimeConfig {
             model_dir: None,
             default_voice: None,
             cache_limit_bytes: None,
+            llm_urls: Vec::new(),
         }
     }
 }
@@ -42,12 +46,23 @@ pub fn build(
     listener: Arc<dyn EventListener>,
 ) -> Result<AppCore> {
     let tts = select_engine(config.model_dir.as_deref());
-    build_with_engine(config, tts, sink, listener)
+    let translation = select_translation(&config);
+    build_with_engines(config, tts, translation, sink, listener)
 }
 
 pub fn build_with_engine(
     config: RuntimeConfig,
     tts: Arc<dyn TtsEngine>,
+    sink: Arc<dyn AudioSink>,
+    listener: Arc<dyn EventListener>,
+) -> Result<AppCore> {
+    build_with_engines(config, tts, TranslationDeps::default(), sink, listener)
+}
+
+pub fn build_with_engines(
+    config: RuntimeConfig,
+    tts: Arc<dyn TtsEngine>,
+    translation: TranslationDeps,
     sink: Arc<dyn AudioSink>,
     listener: Arc<dyn EventListener>,
 ) -> Result<AppCore> {
@@ -68,6 +83,7 @@ pub fn build_with_engine(
             codec: Arc::new(PcmS16Codec),
             sink,
             listener,
+            translation,
         },
     )
 }
@@ -81,6 +97,39 @@ fn select_engine(model_dir: Option<&std::path::Path>) -> Arc<dyn TtsEngine> {
         }
     }
     Arc::new(MockTtsEngine::default())
+}
+
+/// 翻译与查词：模型目录里有什么就启用什么；智能翻译模型下载到可写的 `<data_dir>/models`。
+fn select_translation(config: &RuntimeConfig) -> TranslationDeps {
+    let mut deps = TranslationDeps::default();
+    if let Some(dir) = config.model_dir.as_deref() {
+        if OpusMt::is_available(dir) {
+            // 与 TTS 同时跑：给 MT 两个线程，避免抢占合成
+            match OpusMt::load(dir, 2) {
+                Ok(mt) => deps.translator = Some(Arc::new(mt)),
+                Err(e) => log::warn!("failed to load Opus-MT: {e}"),
+            }
+        }
+        if EcDict::is_available(dir) {
+            match EcDict::open(dir) {
+                Ok(d) => deps.dictionary = Some(Arc::new(d)),
+                Err(e) => log::warn!("failed to open dictionary: {e}"),
+            }
+        }
+    }
+    #[cfg(feature = "llm")]
+    {
+        let provider = es_translate::QwenProvider::new(config.data_dir.join("models"))
+            .with_urls(config.llm_urls.clone());
+        deps.llm = Some(Arc::new(provider));
+    }
+    log::info!(
+        "translation: mt={} dict={} llm={}",
+        deps.translator.is_some(),
+        deps.dictionary.is_some(),
+        deps.llm.is_some()
+    );
+    deps
 }
 
 #[cfg(test)]

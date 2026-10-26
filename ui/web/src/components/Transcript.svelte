@@ -2,6 +2,7 @@
   // 原文（UI_SPEC §5 / §3.4）：当前句卡片 + 逐词高亮 + 跟读标注；当前句固定在约 35% 高度；
   // 每一句的字号、字重、跟读标注与内边距都相同，当前句只换颜色和底色——切句时排版不跳动；
   // 手动滚动后暂停自动跟随，3 秒后或点“回到当前句”恢复。放在播放页右栏（透明底、字号放大）。
+  // 双语：每句下方显示中文译文（后台预翻，逐句到达）；智能模式下当前句可展开“句子解析”。
   import { untrack } from 'svelte';
   import type { SentenceSpan } from '../lib/types';
   import { store } from '../lib/store.svelte';
@@ -51,6 +52,30 @@
   const cur = $derived(store.located.sentence);
   const word = $derived(store.located.word);
   const notes = $derived(store.prefs.showNotes);
+  const bilingual = $derived(store.prefs.bilingual && store.canTranslate);
+  const zh = $derived(store.player.article_id ? store.translations[store.player.article_id] : undefined);
+  let analysisOpen = $state(false);
+  const analysis = $derived(
+    store.player.article_id && cur != null ? store.analyses[`${store.player.article_id}:${cur}`] : undefined,
+  );
+
+  // 打开双语时载入本篇译文（之后由 translation_progress 事件逐句补齐）
+  $effect(() => {
+    const id = store.player.article_id;
+    if (bilingual && id && !untrack(() => store.translations[id])) store.loadTranslations(id);
+  });
+
+  // 换句时收起解析
+  $effect(() => {
+    void cur;
+    analysisOpen = false;
+  });
+
+  function toggleAnalysis() {
+    analysisOpen = !analysisOpen;
+    const id = store.player.article_id;
+    if (analysisOpen && id && cur != null) store.requestAnalysis(id, cur);
+  }
   const curS = $derived(t && cur != null ? t.sentences[cur] : null);
   const stats = $derived.by(() => {
     if (!curS) return { links: 0, weak: 0 };
@@ -129,6 +154,7 @@
     void store.player.article_id;
     void store.prefs.fontSize;
     void store.prefs.lineHeight;
+    void bilingual;
     void padTop;
     untrack(() => requestAnimationFrame(() => scrollToCurrent(true)));
   });
@@ -186,6 +212,16 @@
         <button class="chip {notes ? 'violet' : 'muted'}" aria-pressed={notes} onclick={() => store.toggleNotes()}>
           <Icon name="annot" size={14} stroke={2.2} />跟读标注
         </button>
+        {#if store.canTranslate}
+          <button class="chip {bilingual ? 'accent' : 'muted'}" aria-pressed={bilingual} onclick={() => store.toggleBilingual()}>
+            <Icon name="translate" size={14} stroke={2} />双语
+          </button>
+        {/if}
+        {#if store.smart && t && cur != null}
+          <button class="chip {analysisOpen ? 'violet' : 'muted'}" aria-pressed={analysisOpen} onclick={toggleAnalysis}>
+            <Icon name="sparkle" size={14} stroke={2} />解析
+          </button>
+        {/if}
         {#if aaOpen}
           <div class="aa popup" role="dialog" aria-label="阅读设置">
             <div class="row" style="justify-content:space-between;margin-bottom:14px">
@@ -233,7 +269,25 @@
                     class="w {wordClass(s, seg.i, on)}"
                     data-w={seg.i}>{seg.text}</span
                   >{/if}{/each}{/if}
+            {#if bilingual}
+              <div class="zh" class:wait={!zh?.[s.index]}>{zh?.[s.index]?.text ?? (on ? '翻译中…' : '')}</div>
+            {/if}
           </div>
+          {#if on && analysisOpen}
+            <div class="analysis" role="region" aria-label="句子解析">
+              {#if analysis?.value}
+                <div class="a-tr">{analysis.value.translation}</div>
+                {#if analysis.value.structure}<div class="a-row"><span class="chip violet">结构</span>{analysis.value.structure}</div>{/if}
+                {#each analysis.value.points as pt}
+                  <div class="a-row"><span class="tx a-en">{pt.text}</span>{pt.note}</div>
+                {/each}
+              {:else if analysis?.error}
+                <div class="a-muted">解析失败：{analysis.error}</div>
+              {:else}
+                <div class="a-muted">正在用本地模型解析这句…</div>
+              {/if}
+            </div>
+          {/if}
         {/each}
         <div class="spacer" style:height="{padBottom}px" aria-hidden="true"></div>
       </div>
@@ -342,6 +396,59 @@
   }
   .para {
     margin-top: 12px;
+  }
+  /* 译文：比原文小一号，跟随整句明暗 */
+  .zh {
+    margin-top: 6px;
+    font-family: var(--ui);
+    font-size: calc(var(--tx-oth) * 0.82);
+    line-height: 1.6;
+    font-weight: 500;
+    color: var(--t2);
+    min-height: 1.6em;
+  }
+  .line:not(.on) .zh {
+    color: inherit;
+    opacity: 0.85;
+  }
+  .zh.wait {
+    opacity: 0.5;
+  }
+  .analysis {
+    flex-shrink: 0;
+    margin: 4px 0 8px;
+    padding: 14px 18px;
+    border-radius: 18px;
+    background: var(--card);
+    box-shadow: inset 0 0 0 1px var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--t2);
+  }
+  .a-tr {
+    color: var(--t1);
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .a-row {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+  }
+  .a-row .chip {
+    flex-shrink: 0;
+  }
+  .a-en {
+    flex-shrink: 0;
+    max-width: 45%;
+    color: var(--violet-text);
+    font-weight: 700;
+  }
+  .a-muted {
+    color: var(--t2);
   }
   .st {
     color: var(--violet-text);

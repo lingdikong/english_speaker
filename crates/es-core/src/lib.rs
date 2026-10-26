@@ -12,6 +12,7 @@ pub mod model;
 pub mod ports;
 pub mod testing;
 pub mod text;
+pub mod translate;
 
 mod player;
 mod synth;
@@ -20,3 +21,4 @@ pub use app::{AppConfig, AppCore, AppDeps};
 pub use cache::DEFAULT_LIMIT_BYTES as DEFAULT_CACHE_LIMIT_BYTES;
 pub use error::{CoreError, Result};
 pub use events::{CoreEvent, EventListener};
+pub use translate::TranslationDeps;

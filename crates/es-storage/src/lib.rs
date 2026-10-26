@@ -7,6 +7,10 @@
 //! - `progress`       播放进度
 //! - `settings`       键值设置（缓存上限等）
 //! - `collections`    分类（类似歌单）；`collection_articles` 记录文章与分类的多对多关系
+//! - `translations`   每句译文，按引擎（fast / smart）各一条
+//! - `ai_notes`       智能解析缓存（点词举一反三 / 句子解析，JSON）
+//! - `glossary`       用户术语表
+//! - `vocabulary`     生词本；文章删除后保留（出处置空）
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -85,6 +89,39 @@ CREATE TABLE collection_articles (
     PRIMARY KEY (collection_id, article_id)
 ) WITHOUT ROWID;
 CREATE INDEX collection_articles_article ON collection_articles(article_id);
+"#,
+    r#"
+CREATE TABLE translations (
+    article_id    TEXT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    idx           INTEGER NOT NULL,
+    engine        TEXT NOT NULL,
+    text          TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (article_id, idx, engine)
+) WITHOUT ROWID;
+CREATE TABLE ai_notes (
+    article_id    TEXT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    idx           INTEGER NOT NULL,
+    word          INTEGER NOT NULL,  -- -1：整句解析
+    json          TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    PRIMARY KEY (article_id, idx, word)
+) WITHOUT ROWID;
+CREATE TABLE glossary (
+    term          TEXT PRIMARY KEY COLLATE NOCASE,
+    translation   TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL
+);
+CREATE TABLE vocabulary (
+    word         TEXT PRIMARY KEY,
+    phonetic     TEXT NOT NULL,
+    meaning      TEXT NOT NULL,
+    article_id   TEXT REFERENCES articles(id) ON DELETE SET NULL,
+    sentence_idx INTEGER,
+    sentence     TEXT NOT NULL,
+    added_at_ms  INTEGER NOT NULL
+);
+CREATE INDEX vocabulary_added ON vocabulary(added_at_ms);
 "#,
 ];
 
@@ -715,6 +752,235 @@ impl Storage for SqliteStorage {
             .map_err(db_err)?;
         Ok(())
     }
+
+    fn put_translation(
+        &self,
+        article_id: &str,
+        index: u32,
+        engine: TranslationEngine,
+        text: &str,
+    ) -> Result<()> {
+        self.conn
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT OR REPLACE INTO translations (article_id, idx, engine, text, created_at_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![article_id, index, engine.as_str(), text, now_ms()],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    fn list_translations(&self, article_id: &str) -> Result<Vec<SentenceTranslation>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT idx, engine, text FROM translations WHERE article_id = ?1 ORDER BY idx, engine",
+            )
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([article_id], |r| {
+                Ok((
+                    r.get::<_, u32>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(db_err)?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (index, engine, text) = row.map_err(db_err)?;
+            if let Some(engine) = TranslationEngine::parse(&engine) {
+                out.push(SentenceTranslation {
+                    index,
+                    text,
+                    engine,
+                });
+            }
+        }
+        Ok(out)
+    }
+
+    fn invalidate_translations(&self, term: &str) -> Result<Vec<ArticleId>> {
+        let pattern = format!(
+            "%{}%",
+            term.trim()
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_")
+        );
+        // 子串匹配（比整词匹配宽）：多重翻几句没有坏处
+        const HIT: &str = "SELECT article_id, idx FROM sentences WHERE text LIKE ?1 ESCAPE '\\'";
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction().map_err(db_err)?;
+        let ids = {
+            let mut stmt = tx
+                .prepare(&format!(
+                    "SELECT DISTINCT t.article_id FROM translations t
+                     WHERE (t.article_id, t.idx) IN ({HIT})"
+                ))
+                .map_err(db_err)?;
+            let rows = stmt
+                .query_map([&pattern], |r| r.get::<_, String>(0))
+                .map_err(db_err)?;
+            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(db_err)?
+        };
+        tx.execute(
+            &format!("DELETE FROM translations WHERE (article_id, idx) IN ({HIT})"),
+            [&pattern],
+        )
+        .map_err(db_err)?;
+        tx.execute(
+            &format!("DELETE FROM ai_notes WHERE word = -1 AND (article_id, idx) IN ({HIT})"),
+            [&pattern],
+        )
+        .map_err(db_err)?;
+        tx.commit().map_err(db_err)?;
+        Ok(ids)
+    }
+
+    fn get_ai_note(
+        &self,
+        article_id: &str,
+        sentence: u32,
+        word: Option<u32>,
+    ) -> Result<Option<String>> {
+        let word = word.map_or(-1, i64::from);
+        self.conn
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT json FROM ai_notes WHERE article_id = ?1 AND idx = ?2 AND word = ?3",
+                params![article_id, sentence, word],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(db_err)
+    }
+
+    fn put_ai_note(
+        &self,
+        article_id: &str,
+        sentence: u32,
+        word: Option<u32>,
+        json: &str,
+    ) -> Result<()> {
+        let word = word.map_or(-1, i64::from);
+        self.conn
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT OR REPLACE INTO ai_notes (article_id, idx, word, json, created_at_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![article_id, sentence, word, json, now_ms()],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    fn list_glossary(&self) -> Result<Vec<GlossaryTerm>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT term, translation, created_at_ms FROM glossary ORDER BY term COLLATE NOCASE")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(GlossaryTerm {
+                    term: r.get(0)?,
+                    translation: r.get(1)?,
+                    created_at_ms: r.get(2)?,
+                })
+            })
+            .map_err(db_err)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(db_err)
+    }
+
+    fn upsert_glossary(&self, t: &GlossaryTerm) -> Result<()> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction().map_err(db_err)?;
+        // 主键不区分大小写：改写法（app → App）时先删旧行，保留用户最新的写法
+        tx.execute("DELETE FROM glossary WHERE term = ?1", [&t.term])
+            .map_err(db_err)?;
+        tx.execute(
+            "INSERT INTO glossary (term, translation, created_at_ms) VALUES (?1, ?2, ?3)",
+            params![t.term, t.translation, t.created_at_ms],
+        )
+        .map_err(db_err)?;
+        tx.commit().map_err(db_err)
+    }
+
+    fn delete_glossary(&self, term: &str) -> Result<()> {
+        self.conn
+            .lock()
+            .unwrap()
+            .execute("DELETE FROM glossary WHERE term = ?1", [term])
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    fn list_vocab(&self) -> Result<Vec<VocabEntry>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT v.word, v.phonetic, v.meaning, v.article_id, a.title, v.sentence_idx,
+                        v.sentence, v.added_at_ms
+                 FROM vocabulary v LEFT JOIN articles a ON a.id = v.article_id
+                 ORDER BY v.added_at_ms DESC",
+            )
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |r| {
+                let article_id: Option<String> = r.get(3)?;
+                Ok(VocabEntry {
+                    word: r.get(0)?,
+                    phonetic: r.get(1)?,
+                    meaning: r.get(2)?,
+                    article_title: r.get(4)?,
+                    sentence_index: if article_id.is_some() {
+                        r.get(5)?
+                    } else {
+                        None
+                    },
+                    article_id,
+                    sentence: r.get(6)?,
+                    added_at_ms: r.get(7)?,
+                })
+            })
+            .map_err(db_err)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(db_err)
+    }
+
+    fn upsert_vocab(&self, v: &VocabEntry) -> Result<()> {
+        self.conn
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT OR REPLACE INTO vocabulary
+                   (word, phonetic, meaning, article_id, sentence_idx, sentence, added_at_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    v.word,
+                    v.phonetic,
+                    v.meaning,
+                    v.article_id,
+                    v.sentence_index,
+                    v.sentence,
+                    v.added_at_ms
+                ],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    fn delete_vocab(&self, word: &str) -> Result<()> {
+        self.conn
+            .lock()
+            .unwrap()
+            .execute("DELETE FROM vocabulary WHERE word = ?1", [word])
+            .map_err(db_err)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -925,5 +1191,92 @@ mod tests {
             s.get_setting("cache.limit_bytes").unwrap().as_deref(),
             Some("42")
         );
+    }
+
+    #[test]
+    fn translations_cache_and_invalidate_by_term() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let (a, spans) = article("a", 1);
+        s.insert_article(&a, &spans).unwrap();
+        s.put_translation("a", 0, TranslationEngine::Fast, "句子 0。")
+            .unwrap();
+        s.put_translation("a", 0, TranslationEngine::Smart, "第 0 句。")
+            .unwrap();
+        s.put_translation("a", 1, TranslationEngine::Fast, "句子 1。")
+            .unwrap();
+        s.put_ai_note("a", 1, None, "{}").unwrap();
+        s.put_ai_note("a", 1, Some(0), "{\"w\":1}").unwrap();
+        assert_eq!(s.list_translations("a").unwrap().len(), 3);
+
+        // “Sentence 1.” 命中：只作废第 1 句的译文和整句解析，点词缓存保留
+        assert_eq!(s.invalidate_translations("ce 1").unwrap(), ["a"]);
+        let left: Vec<_> = s
+            .list_translations("a")
+            .unwrap()
+            .into_iter()
+            .map(|t| (t.index, t.engine))
+            .collect();
+        assert_eq!(
+            left,
+            [(0, TranslationEngine::Fast), (0, TranslationEngine::Smart)]
+        );
+        assert!(s.get_ai_note("a", 1, None).unwrap().is_none());
+        assert!(s.get_ai_note("a", 1, Some(0)).unwrap().is_some());
+        // LIKE 通配符按字面匹配
+        assert!(s.invalidate_translations("%").unwrap().is_empty());
+
+        s.delete_article("a").unwrap();
+        assert!(s.list_translations("a").unwrap().is_empty());
+    }
+
+    #[test]
+    fn glossary_is_case_insensitive() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let term = |t: &str, zh: &str| GlossaryTerm {
+            term: t.into(),
+            translation: zh.into(),
+            created_at_ms: 0,
+        };
+        s.upsert_glossary(&term("app", "应用")).unwrap();
+        s.upsert_glossary(&term("App", "应用程序")).unwrap();
+        s.upsert_glossary(&term("Token", "令牌")).unwrap();
+        let all = s.list_glossary().unwrap();
+        assert_eq!(all, [term("App", "应用程序"), term("Token", "令牌")]);
+        s.delete_glossary("TOKEN").unwrap();
+        assert_eq!(s.list_glossary().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn vocabulary_survives_article_deletion() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        let (a, spans) = article("a", 1);
+        s.insert_article(&a, &spans).unwrap();
+        let mut v = VocabEntry {
+            word: "sentence".into(),
+            phonetic: "ˈsentəns".into(),
+            meaning: "n. 句子".into(),
+            article_id: Some("a".into()),
+            article_title: None,
+            sentence_index: Some(1),
+            sentence: "Sentence 1.".into(),
+            added_at_ms: 10,
+        };
+        s.upsert_vocab(&v).unwrap();
+        v.added_at_ms = 20;
+        s.upsert_vocab(&v).unwrap();
+        let list = s.list_vocab().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].article_title.as_deref(), Some("T"));
+        assert_eq!(list[0].added_at_ms, 20);
+
+        s.delete_article("a").unwrap();
+        let list = s.list_vocab().unwrap();
+        assert_eq!(
+            (list[0].article_id.as_deref(), list[0].sentence_index),
+            (None, None)
+        );
+        assert_eq!(list[0].sentence, "Sentence 1.");
+        s.delete_vocab("sentence").unwrap();
+        assert!(s.list_vocab().unwrap().is_empty());
     }
 }

@@ -8,6 +8,11 @@ This product bundles third-party components:
 - Kokoro-82M model weights and voices (hexgrad), ONNX export by onnx-community
   Licensed under the Apache License, Version 2.0 — see models/kokoro/README.md
 - misaki English G2P dictionaries (hexgrad), Apache License, Version 2.0
+- Opus-MT English-Chinese translation model (Helsinki-NLP), ONNX export by Xenova
+  Licensed under the Apache License, Version 2.0 — see models/opus-mt-en-zh/README.md
+- ECDICT English-Chinese dictionary (skywind3000), MIT License — see models/dict/LICENSE
+- Downloaded on demand (not bundled): Qwen2.5-0.5B-Instruct GGUF (Alibaba Cloud Qwen team),
+  Apache License, Version 2.0
 - Space Grotesk, Manrope, Noto Sans fonts, SIL Open Font License 1.1
 
 See ACKNOWLEDGEMENTS.md for the full list of third-party software and credits.

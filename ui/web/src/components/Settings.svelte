@@ -1,8 +1,9 @@
 <script lang="ts">
-  // 设置页（UI_SPEC §4.7，PC 两列卡片）：外观 · 阅读 · 朗读 · 本地缓存 · 关于。
+  // 设置页（UI_SPEC §4.7，PC 两列卡片）：外观 · 阅读 · 翻译 · 朗读 · 本地缓存 · 关于。
   import { store, fmtBytes, voiceLabel, RATES, type Theme } from '../lib/store.svelte';
   import Icon from './Icon.svelte';
   import ReadingSettings from './ReadingSettings.svelte';
+  import TranslationSettings from './TranslationSettings.svelte';
 
   const GB = 1024 ** 3;
   /** “不限”：核心以字节数表示上限，这里用 JS 能精确表示的最大整数。 */
@@ -66,6 +67,13 @@
       <div class="label">阅读</div>
       <ReadingSettings />
     </section>
+
+    {#if store.translator}
+      <section>
+        <div class="label">翻译</div>
+        <TranslationSettings />
+      </section>
+    {/if}
   </div>
 
   <div class="col">
@@ -137,11 +145,13 @@
       <div class="group">
         <div class="item"><span>版本</span><span class="hint">English Speaker {__APP_VERSION__}</span></div>
         <div class="item"><span>朗读模型</span><span class="hint">Kokoro-82M v1.0 int8</span></div>
+        <div class="item"><span>翻译模型</span><span class="hint">Opus-MT en-zh int8 · ECDICT{#if store.translator?.llm.model_name} · {store.translator.llm.model_name}（可选）{/if}</span></div>
         <div class="item"><span>隐私</span><span class="hint">完全离线，文章不会上传</span></div>
         <div class="item lic">
           <span>开源许可</span>
           <span class="hint"
-            >Kokoro-82M（Apache-2.0）· ONNX Runtime（MIT）· misaki 词典（Apache-2.0）· Space Grotesk / Manrope / Noto Sans（SIL OFL
+            >Kokoro-82M（Apache-2.0）· ONNX Runtime（MIT）· misaki 词典（Apache-2.0）· Opus-MT（Apache-2.0）· ECDICT（MIT）·
+            Qwen2.5（Apache-2.0）· llama.cpp（MIT）· Space Grotesk / Manrope / Noto Sans（SIL OFL
             1.1）· Svelte（MIT）· CEF（BSD-3-Clause）</span
           >
         </div>

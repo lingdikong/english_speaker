@@ -5,6 +5,7 @@ import SwiftUI
 enum Icon: String {
     case home, lib, search, gear, plus, prev, next, loop, queue, down, close, annot, vol, textsize, sun, moon
     case wave, bookmark, cloud, more
+    case star, translate, sparkle, trash
 
     /// 描边元素（stroke）。
     var strokes: [SVGElement] {
@@ -30,6 +31,10 @@ enum Icon: String {
         case .bookmark: [.path("M6 3.5h12v17l-6-4-6 4z")]
         case .cloud: [.path("M7 18a4.5 4.5 0 0 1-.5-9 6 6 0 0 1 11.5 1.5A3.8 3.8 0 0 1 17.5 18z"), .path("M12 11v5M9.8 14l2.2 2 2.2-2")]
         case .more: []
+        case .star: [.path("m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z")]
+        case .translate: [.path("M3 5h9M7.5 3v2M5 9c1.2 2.8 3.4 4.8 6 6M10 5c-.8 4-3.3 7.4-7 9.5"), .path("m13 21 4-10 4 10M14.4 17.5h5.2")]
+        case .sparkle: [.path("M12 3c.6 4.6 2.4 6.4 7 7-4.6.6-6.4 2.4-7 7-.6-4.6-2.4-6.4-7-7 4.6-.6 6.4-2.4 7-7z")]
+        case .trash: [.path("M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3")]
         }
     }
 }

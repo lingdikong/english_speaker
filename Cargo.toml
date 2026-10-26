@@ -13,6 +13,8 @@ es-audio = { path = "crates/es-audio" }
 es-storage = { path = "crates/es-storage" }
 es-tts-kokoro = { path = "crates/es-tts-kokoro" }
 es-runtime = { path = "crates/es-runtime" }
+es-onnx = { path = "crates/es-onnx" }
+es-translate = { path = "crates/es-translate", default-features = false }
 
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
@@ -25,6 +27,10 @@ uniffi = "0.32"
 cpal = "0.18"
 ort = "=2.0.0-rc.15"
 # 桌面端 Chromium 宿主（tauri-apps/cef-rs）；版本号 = CEF 版本，升级时一并更新 bundle 脚本
+# 智能翻译（本地大模型）：llama.cpp 绑定；不用 common（只需要基础推理与 GBNF 语法采样）
+llama-cpp-2 = { version = "=0.1.158", default-features = false }
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
+sha2 = "0.10"
 cef = { version = "=154.5.0", default-features = false }
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std"] }

@@ -50,6 +50,8 @@
 | `es-tts-kokoro` | Kokoro-82M 推理（`ort`）+ 无 GPL 的英文 G2P | 仅执行后端（CoreML / NNAPI / DirectML，可选） |
 | `es-storage` | SQLite（bundled，迁移脚本） | 无 |
 | `es-audio` | 按块编解码（PCM s16；Opus 计划中） | 无 |
+| `es-translate` | 翻译与查词：Opus-MT（`ort`）、ECDICT（SQLite）、Qwen（llama.cpp，`llm` 特性），见 [TRANSLATION.md](TRANSLATION.md) | Metal（Apple）/ CPU |
+| `es-onnx` | 全进程共用的 ONNX Runtime 环境与平台加速后端（Kokoro 与 Opus-MT 共用） | 执行后端 |
 | `es-runtime` | 组装根：按配置选择实现，FFI 和桌面共用 | 无 |
 | `es-ffi` | UniFFI 导出 `SpeakerCore`，生成 Swift / Kotlin | 产物：`.a` / `.so` |
 | `es-desktop` | 桌面宿主：JSON 桥、cpal 音频输出、开发 CLI、（CEF 窗口） | 桌面三平台 |

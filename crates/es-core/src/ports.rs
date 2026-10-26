@@ -7,6 +7,12 @@
 //! | `AudioCodec`   | `es-audio`（PCM s16，后续 Opus）           |
 //! | `AudioSink`    | 平台层：iOS AVAudioEngine / Android AudioTrack / 桌面 cpal |
 //! | `EventListener`| 平台层：UI 状态更新                        |
+//! | `Translator`   | `es-translate`（Opus-MT，ONNX）            |
+//! | `Dictionary`   | `es-translate`（ECDICT，SQLite）           |
+//! | `LlmProvider` / `LanguageModel` | `es-translate`（Qwen，llama.cpp）|
+
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use crate::error::Result;
 use crate::model::*;
@@ -103,6 +109,49 @@ pub trait Storage: Send + Sync {
     fn get_progress(&self, article_id: &str) -> Result<Option<u64>>;
     fn get_setting(&self, key: &str) -> Result<Option<String>>;
     fn set_setting(&self, key: &str, value: &str) -> Result<()>;
+
+    // —— 译文缓存 ——
+    /// 写入（或替换）一句某个引擎的译文。
+    fn put_translation(
+        &self,
+        article_id: &str,
+        index: u32,
+        engine: TranslationEngine,
+        text: &str,
+    ) -> Result<()>;
+    /// 一篇的全部译文（同一句可能有 Fast 与 Smart 两条），按句序。
+    fn list_translations(&self, article_id: &str) -> Result<Vec<SentenceTranslation>>;
+    /// 删除原文包含 `term`（不区分大小写）的句子的译文；术语表变化后调用，返回受影响的文章。
+    fn invalidate_translations(&self, term: &str) -> Result<Vec<ArticleId>>;
+
+    // —— 智能解析缓存（点词举一反三 / 句子解析，JSON） ——
+    /// `word` 为空表示整句解析。
+    fn get_ai_note(
+        &self,
+        article_id: &str,
+        sentence: u32,
+        word: Option<u32>,
+    ) -> Result<Option<String>>;
+    fn put_ai_note(
+        &self,
+        article_id: &str,
+        sentence: u32,
+        word: Option<u32>,
+        json: &str,
+    ) -> Result<()>;
+
+    // —— 术语表 ——
+    fn list_glossary(&self) -> Result<Vec<GlossaryTerm>>;
+    /// 按术语（不区分大小写）插入或替换。
+    fn upsert_glossary(&self, term: &GlossaryTerm) -> Result<()>;
+    fn delete_glossary(&self, term: &str) -> Result<()>;
+
+    // —— 生词本 ——
+    /// 按添加时间倒序（新收藏的在前）。
+    fn list_vocab(&self) -> Result<Vec<VocabEntry>>;
+    /// 按 `word` 插入或替换（再次收藏时更新出处与时间）。
+    fn upsert_vocab(&self, entry: &VocabEntry) -> Result<()>;
+    fn delete_vocab(&self, word: &str) -> Result<()>;
 }
 
 // ---------- 编解码 ----------
@@ -140,4 +189,50 @@ pub trait AudioSink: Send + Sync {
     /// 让 `played_frames` 能最终追上已写入的帧数（否则结尾会被截断）。
     fn end_stream(&self) {}
     fn close(&self);
+}
+
+// ---------- 翻译与查词 ----------
+
+/// 机器翻译（英 → 中），一次一句。实现须线程安全，可能在后台线程调用。
+pub trait Translator: Send + Sync {
+    fn id(&self) -> &str;
+    fn translate(&self, text: &str) -> Result<String>;
+}
+
+/// 离线词典。`word` 可以是变形（perceived），实现负责还原到原形。
+pub trait Dictionary: Send + Sync {
+    fn lookup(&self, word: &str) -> Result<Option<DictEntry>>;
+}
+
+pub struct LlmRequest<'a> {
+    pub system: &'a str,
+    /// 少样本示例（用户, 助手）：小模型照着示例的格式与粒度回答，比单纯的说明可靠得多。
+    pub shots: &'a [(&'a str, &'a str)],
+    pub user: &'a str,
+    pub max_tokens: u32,
+    /// GBNF 语法（llama.cpp）：约束输出为合法 JSON 等；为空则自由生成。
+    pub grammar: Option<&'a str>,
+}
+
+/// 已加载进内存的本地大模型。
+pub trait LanguageModel: Send + Sync {
+    fn id(&self) -> &str;
+    /// 生成完整回复。`cancel` 置位后尽快返回 `CoreError::Cancelled`。
+    fn generate(&self, req: &LlmRequest<'_>, cancel: &AtomicBool) -> Result<String>;
+}
+
+/// 本地大模型的“仓库”：下载、校验、删除、加载。何时下载 / 加载 / 释放由核心层决定。
+pub trait LlmProvider: Send + Sync {
+    fn model_name(&self) -> &str;
+    /// 下载完成后的文件大小。
+    fn size_bytes(&self) -> u64;
+    fn is_downloaded(&self) -> bool;
+    /// 已下载的字节数（断点续传的起点）。
+    fn partial_bytes(&self) -> u64;
+    /// 下载并校验，支持断点续传。`progress(已下载, 总大小)`；`cancel` 置位后返回 `CoreError::Cancelled`。
+    fn download(&self, progress: &mut dyn FnMut(u64, u64), cancel: &AtomicBool) -> Result<()>;
+    /// 删除模型文件（含未完成的下载）。
+    fn delete(&self) -> Result<()>;
+    /// 加载进内存（数秒，在后台线程调用）。
+    fn load(&self) -> Result<Arc<dyn LanguageModel>>;
 }

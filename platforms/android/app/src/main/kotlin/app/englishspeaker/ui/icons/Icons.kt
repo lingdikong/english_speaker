@@ -44,6 +44,11 @@ object Icons {
         // 拖动排序把手（设计稿未给出，按同一线性风格补充）
         "grip" to listOf("M5 9h14M5 15h14"),
         "moon" to listOf("M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"),
+        // 翻译与查词
+        "star" to listOf("m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"),
+        "translate" to listOf("M3 5h9M7.5 3v2M5 9c1.2 2.8 3.4 4.8 6 6M10 5c-.8 4-3.3 7.4-7 9.5", "m13 21 4-10 4 10M14.4 17.5h5.2"),
+        "sparkle" to listOf("M12 3c.6 4.6 2.4 6.4 7 7-4.6.6-6.4 2.4-7 7-.6-4.6-2.4-6.4-7-7 4.6-.6 6.4-2.4 7-7z"),
+        "trash" to listOf("M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"),
     )
 
     private val cache = HashMap<String, ImageVector>()

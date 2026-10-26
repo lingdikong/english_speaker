@@ -3,16 +3,20 @@ import SwiftUI
 
 /// 点词读音（UI_SPEC §4.5）：词组 34 Space Grotesk（‿ violet）+ IPA 20 violet-text + 发音按钮；
 /// 类型 chip + 美式/英式；中文说明；“同类”示例卡；“从这里播放” / “0.75× 慢放这句”。
+/// 翻译与查词：离线词典释义、☆ 收藏到生词本；智能模式下“举一反三”。
 struct WordSheet: View {
     let ref: WordRef
     @Environment(Store.self) private var store
     @Environment(\.palette) private var p
     @Environment(\.dismiss) private var dismiss
+    @State private var dict: DictEntry?
 
     var body: some View {
         let words = store.timeline?.sentences[safe: ref.sentence]?.words ?? []
         let info = WordInfo(words: words, index: ref.word)
         let american = store.current.flatMap { store.voice(of: $0) }?.accent != .british
+        let rich = dict != nil || store.smartReady
+        ScrollView(showsIndicators: false) {
         VStack(alignment: .leading, spacing: 18) {
             if let info {
                 HStack(alignment: .top) {
@@ -23,6 +27,14 @@ struct WordSheet: View {
                         }
                     }
                     Spacer()
+                    if store.translator?.dictionary == true {
+                        let key = (dict?.word ?? info.group.first ?? "").lowercased()
+                        let saved = store.isInVocab(key)
+                        IconButton(icon: .star, size: 19, weight: 1.9, fill: true, color: saved ? p.accentText : nil,
+                                   label: saved ? "从生词本移除" : "加入生词本") {
+                            if saved { store.removeVocab(key) } else { store.addVocab(sentence: ref.sentence, word: ref.word) }
+                        }
+                    }
                     IconButton(icon: .vol, size: 20, weight: 1.9, fill: true, label: "播放这个词") {
                         store.playSpan(startMs: info.startMs, endMs: info.endMs)
                     }
@@ -35,6 +47,8 @@ struct WordSheet: View {
                     .font(Fonts.ui(15, .medium)).lineSpacing(25 - 20.5)
                     .foregroundStyle(p.t2)
                     .fixedSize(horizontal: false, vertical: true)
+                if let dict, !dict.senses.isEmpty { DictionarySection(entry: dict) }
+                if store.smartReady { InsightSection(sentence: ref.sentence, word: ref.word) }
                 if let similar = info.similar {
                     (Text("同类：").foregroundColor(p.t2) + similar(p))
                         .font(Fonts.ui(14, .medium)).lineSpacing(4)
@@ -69,7 +83,12 @@ struct WordSheet: View {
         .padding(.top, 28)
         .padding(.bottom, 12)
         .frame(maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.height(info == nil ? 200 : (info?.similar == nil ? 330 : 400))])
+        }
+        .onAppear {
+            if let w = words[safe: ref.word] { dict = store.lookup(w.text) }
+        }
+        .presentationDetents(rich ? [.medium, .large]
+            : [.height(info == nil ? 200 : (info?.similar == nil ? 330 : 400))])
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(28)
         .presentationBackground(p.surface)

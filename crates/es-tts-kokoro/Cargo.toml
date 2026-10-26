@@ -9,13 +9,4 @@ es-core.workspace = true
 log.workspace = true
 serde_json.workspace = true
 ort.workspace = true
-
-# 平台加速后端（ORT 预编译包按特性选择：CoreML / NNAPI / DirectML）
-[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
-ort = { workspace = true, features = ["coreml"] }
-
-[target.'cfg(target_os = "android")'.dependencies]
-ort = { workspace = true, features = ["nnapi"] }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-ort = { workspace = true, features = ["directml"] }
+es-onnx.workspace = true

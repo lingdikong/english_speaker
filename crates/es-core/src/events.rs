@@ -1,6 +1,9 @@
 use serde::Serialize;
 
-use crate::model::{ArticleId, CacheStats, PlayerState, SentenceSpan};
+use crate::model::{
+    ArticleId, CacheStats, PlayerState, SentenceAnalysis, SentenceSpan, SentenceTranslation,
+    TranslatorStatus, WordInsight,
+};
 
 /// 核心层向 UI 推送的事件。
 ///
@@ -38,6 +41,37 @@ pub enum CoreEvent {
         sentence: Option<u32>,
         word: Option<u32>,
     },
+    /// 一句译文已写入缓存（后台预翻 / 智能精翻）。双语模式下 UI 据此补上这句译文。
+    TranslationProgress {
+        article_id: ArticleId,
+        translation: SentenceTranslation,
+        /// 已有译文的句数。
+        translated: u32,
+        total: u32,
+    },
+    /// 这篇的译文被整体作废（如术语表变化），UI 应重新读取 `translations`。
+    TranslationsChanged {
+        article_id: ArticleId,
+    },
+    /// 点词“举一反三”完成；失败时 `insight` 为空、`error` 有值，UI 退回词典释义。
+    WordInsightReady {
+        article_id: ArticleId,
+        sentence: u32,
+        word: u32,
+        insight: Option<WordInsight>,
+        error: Option<String>,
+    },
+    SentenceAnalysisReady {
+        article_id: ArticleId,
+        sentence: u32,
+        analysis: Option<SentenceAnalysis>,
+        error: Option<String>,
+    },
+    /// 翻译模式、模型下载进度（约 4 次/秒）或加载状态变化。
+    TranslatorChanged {
+        status: TranslatorStatus,
+    },
+    VocabularyChanged,
 }
 
 pub trait EventListener: Send + Sync {

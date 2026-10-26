@@ -13,6 +13,7 @@ use crate::player::{Player, PlayerCmd};
 use crate::ports::{AudioCodec, AudioSink, Storage, TtsEngine};
 use crate::synth::Synthesizer;
 use crate::text;
+use crate::translate::{self, Translation, TranslationDeps};
 
 pub struct AppConfig {
     /// 应用私有数据目录（数据库、音频缓存）。
@@ -42,6 +43,8 @@ pub struct AppDeps {
     pub codec: Arc<dyn AudioCodec>,
     pub sink: Arc<dyn AudioSink>,
     pub listener: Arc<dyn EventListener>,
+    /// 翻译与查词（均可缺省：没有模型文件时对应功能不可用）。
+    pub translation: TranslationDeps,
 }
 
 /// 合成线程与播放线程共享的依赖与运行时状态。
@@ -68,6 +71,7 @@ pub struct AppCore {
     shared: Arc<Shared>,
     synth: Synthesizer,
     player: Player,
+    translation: Translation,
     auto_synthesize: bool,
 }
 
@@ -88,6 +92,11 @@ impl AppCore {
             .and_then(|v| v.parse().ok())
             .unwrap_or(config.cache_limit_bytes);
 
+        let translation = Translation::spawn(
+            deps.storage.clone(),
+            deps.listener.clone(),
+            deps.translation,
+        )?;
         let shared = Arc::new(Shared {
             storage: deps.storage,
             tts: deps.tts,
@@ -104,6 +113,7 @@ impl AppCore {
             synth: Synthesizer::spawn(shared.clone(), player.sender()),
             player,
             shared,
+            translation,
             auto_synthesize: config.auto_synthesize,
         };
         core.resume_interrupted()?;
@@ -194,6 +204,7 @@ impl AppCore {
         if self.auto_synthesize {
             self.queue(&article.id, false)?;
         }
+        self.translation.enqueue(&article.id);
         self.shared.emit(CoreEvent::LibraryChanged);
         self.summary(&article.id)
     }
@@ -218,6 +229,7 @@ impl AppCore {
 
     pub fn delete_article(&self, id: &str) -> Result<()> {
         self.synth.cancel(id);
+        self.translation.forget(id);
         if self.player.state().article_id.as_deref() == Some(id) {
             self.player.send(PlayerCmd::Stop);
         }
@@ -420,6 +432,139 @@ impl AppCore {
         }
     }
 
+    // ---------- 翻译与查词 ----------
+    //
+    // 双模：Fast（机器翻译 + 离线词典，默认）与 Smart（本地大模型，设置里打开并下载）。
+    // 平台层不需要关心当前是哪种模式：同一套方法，结果通过返回值或事件送达。
+
+    /// 翻译与查词能力总览（设置页）。
+    pub fn translator_status(&self) -> TranslatorStatus {
+        self.translation.status()
+    }
+
+    /// 一篇的译文，每句最多一条（智能精翻优先）。没翻到的句子不在列表里，
+    /// 之后通过 `TranslationProgress` 事件逐句送达。
+    pub fn translations(&self, id: &str) -> Result<Vec<SentenceTranslation>> {
+        self.translation.translations(id)
+    }
+
+    /// 用户正在看这篇（打开播放页、打开双语）：插到翻译队首；智能模式下逐句精翻。
+    pub fn prepare_translations(&self, id: &str) -> Result<()> {
+        self.get_article(id)?;
+        self.translation.focus(id);
+        Ok(())
+    }
+
+    /// 离线词典查词（毫秒级，可在 UI 线程调用）。`word` 可带标点、可为变形（perceived → perceive）。
+    pub fn lookup_word(&self, word: &str) -> Result<Option<DictEntry>> {
+        self.translation.lookup(word)
+    }
+
+    /// 点词“举一反三”（智能模式）。有缓存时直接返回；否则返回 `None` 并在后台生成，
+    /// 结果通过 `WordInsightReady` 送达。智能模式不可用时返回 `InvalidInput`。
+    pub fn word_insight(&self, id: &str, sentence: u32, word: u32) -> Result<Option<WordInsight>> {
+        self.translation.word_insight(id, sentence, word)
+    }
+
+    /// 句子解析（智能模式），用法同 `word_insight`，结果通过 `SentenceAnalysisReady` 送达。
+    pub fn sentence_analysis(&self, id: &str, sentence: u32) -> Result<Option<SentenceAnalysis>> {
+        self.translation.sentence_analysis(id, sentence)
+    }
+
+    /// 打开 / 关闭智能翻译。打开时若模型未下载，仍退回 Fast，UI 应引导调用 `download_llm`。
+    /// 关闭时立即释放模型内存。
+    pub fn set_smart_translation(&self, enabled: bool) -> Result<()> {
+        self.translation.set_smart(enabled)
+    }
+
+    /// 后台下载智能翻译模型（约 430MB，断点续传，进度通过 `TranslatorChanged` 送达）。
+    /// 是否仅在 Wi-Fi 下载由平台层判断并提示。
+    pub fn download_llm(&self) -> Result<()> {
+        self.translation.download_llm()
+    }
+
+    pub fn cancel_llm_download(&self) {
+        self.translation.cancel_llm_download()
+    }
+
+    pub fn delete_llm(&self) -> Result<()> {
+        self.translation.delete_llm()
+    }
+
+    // —— 术语表 ——
+
+    pub fn list_glossary(&self) -> Result<Vec<GlossaryTerm>> {
+        self.translation.list_glossary()
+    }
+
+    /// 添加或修改术语（按术语不区分大小写）；含该术语的句子会重新翻译。
+    pub fn add_glossary_term(&self, term: &str, translation: &str) -> Result<GlossaryTerm> {
+        self.translation.add_glossary(term, translation)
+    }
+
+    pub fn remove_glossary_term(&self, term: &str) -> Result<()> {
+        self.translation.remove_glossary(term)
+    }
+
+    // —— 生词本 ——
+
+    pub fn list_vocab(&self) -> Result<Vec<VocabEntry>> {
+        self.shared.storage.list_vocab()
+    }
+
+    /// 收藏文章第 `sentence` 句第 `word` 个词：按词典原形去重，记下音标、简明释义与出处句子。
+    pub fn add_vocab(&self, id: &str, sentence: u32, word: u32) -> Result<VocabEntry> {
+        let article = self.get_article(id)?;
+        let span = self
+            .shared
+            .storage
+            .list_sentences(id)?
+            .into_iter()
+            .map(|s| s.span)
+            .find(|s| s.index == sentence)
+            .ok_or_else(|| CoreError::NotFound(format!("sentence {sentence}")))?;
+        let text = span
+            .words
+            .get(word as usize)
+            .map(|w| translate::clean_word(&w.text).to_string())
+            .filter(|w| !w.is_empty())
+            .ok_or_else(|| CoreError::NotFound(format!("word {word}")))?;
+        let dict = self.lookup_word(&text).ok().flatten();
+        let entry = VocabEntry {
+            word: dict
+                .as_ref()
+                .map_or(text.as_str(), |d| d.word.as_str())
+                .to_lowercase(),
+            phonetic: dict
+                .as_ref()
+                .map(|d| d.phonetic.clone())
+                .unwrap_or_default(),
+            meaning: dict.as_ref().map(|d| d.brief()).unwrap_or_default(),
+            article_id: Some(article.id),
+            article_title: Some(article.title),
+            sentence_index: Some(sentence),
+            sentence: span.text,
+            added_at_ms: now_ms(),
+        };
+        self.shared.storage.upsert_vocab(&entry)?;
+        self.shared.emit(CoreEvent::VocabularyChanged);
+        Ok(entry)
+    }
+
+    /// `word` 为生词本里的原形（`VocabEntry::word`），也接受变形与大小写不同的写法。
+    pub fn remove_vocab(&self, word: &str) -> Result<()> {
+        let key = self.lookup_word(word).ok().flatten().map_or_else(
+            || translate::clean_word(word).to_lowercase(),
+            |d| d.word.to_lowercase(),
+        );
+        self.shared.storage.delete_vocab(&key)?;
+        if key != word {
+            self.shared.storage.delete_vocab(word)?;
+        }
+        self.shared.emit(CoreEvent::VocabularyChanged);
+        Ok(())
+    }
+
     // ---------- 播放 ----------
 
     /// 播放文章，从上次进度继续。未缓存完的文章会被提到合成队首，边听边转。
@@ -427,6 +572,7 @@ impl AppCore {
         self.queue(id, true)?;
         self.shared.storage.touch_cache_entry(id, now_ms())?;
         let start_ms = self.shared.storage.get_progress(id)?.unwrap_or(0);
+        self.translation.focus(id);
         self.player.send(PlayerCmd::Load {
             article_id: id.to_string(),
             start_ms,

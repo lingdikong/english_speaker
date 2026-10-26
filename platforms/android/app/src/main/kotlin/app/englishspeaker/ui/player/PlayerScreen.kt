@@ -72,6 +72,8 @@ import app.englishspeaker.ui.components.fadeUnder
 import app.englishspeaker.ui.components.fadeTop
 import app.englishspeaker.ui.components.glass
 import app.englishspeaker.ui.icons.Icons
+import app.englishspeaker.ui.translate.SentenceAnalysisPanel
+import app.englishspeaker.ui.translate.TranslationLine
 import app.englishspeaker.ui.settings.nextRate
 import app.englishspeaker.ui.settings.rateLabel
 import app.englishspeaker.ui.theme.LocalPalette
@@ -97,6 +99,8 @@ fun PlayerScreen(vm: AppViewModel, a: ArticleSummary) {
     val pos by repo.position.collectAsState()
     val timeline by repo.timeline.collectAsState()
     val annotations by repo.showAnnotations.collectAsState()
+    val bilingual by repo.bilingual.collectAsState()
+    val translator by repo.translator.collectAsState()
     val focusEnabled by vm.settings.focusMode.collectAsState()
     val fontSize by vm.settings.fontSize.collectAsState()
     val lineHeight by vm.settings.lineHeight.collectAsState()
@@ -262,6 +266,12 @@ fun PlayerScreen(vm: AppViewModel, a: ArticleSummary) {
                             Chip("跟读标注", if (annotations) ChipKind.Violet else ChipKind.Muted, height = 36.dp, icon = Icons.line("annot", 2f)) {
                                 repo.setAnnotations(!annotations)
                             }
+                            if (translator?.active != null) {
+                                Spacer(Modifier.width(8.dp))
+                                Chip("双语", if (bilingual) ChipKind.Accent else ChipKind.Muted, height = 36.dp, icon = Icons.line("translate", 1.9f)) {
+                                    repo.setBilingual(!bilingual)
+                                }
+                            }
                             Spacer(Modifier.width(8.dp))
                             Chip("阅读设置", ChipKind.Muted, height = 36.dp, icon = Icons.line("textsize", 1.9f)) { vm.showReading = true }
                             Spacer(Modifier.weight(1f))
@@ -293,6 +303,11 @@ private fun Transcript(
     val reduce = LocalReduceMotion.current
     val repo = vm.repo
     val listState = rememberLazyListState()
+    val translator by repo.translator.collectAsState()
+    val bilingualOn by repo.bilingual.collectAsState()
+    val bilingual = bilingualOn && translator?.active != null
+    val smart = translator?.active == app.englishspeaker.core.TranslationEngine.SMART
+    val zh by repo.translations.collectAsState()
     val dragged by listState.interactionSource.collectIsDraggedAsState()
     var following by remember { mutableStateOf(true) }
     var resumeTick by remember { mutableLongStateOf(0L) }
@@ -330,6 +345,7 @@ private fun Transcript(
                                 onWord = { w -> onWord(i, w) },
                                 onWordLong = { w -> onWord(i, w) },
                             )
+                            if (bilingual) TranslationLine(zh[i]?.text, fontSize, current = true)
                             if (annotations) {
                                 val (links, weak) = annotationCounts(s)
                                 if (links + weak > 0) Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -338,6 +354,7 @@ private fun Transcript(
                                 }
                             }
                         }
+                        if (smart) Box(Modifier.padding(top = 10.dp)) { SentenceAnalysisPanel(repo, i) }
                     } else {
                         val small = fontSize * 19f / 24f
                         SentenceText(
@@ -346,6 +363,7 @@ private fun Transcript(
                             onSentence = if (s.ready) ({ repo.seekSentence(i); following = true }) else null,
                             onWordLong = if (s.ready) ({ w -> onWord(i, w) }) else null,
                         )
+                        if (bilingual) TranslationLine(zh[i]?.text, small, current = false)
                     }
                 }
             }

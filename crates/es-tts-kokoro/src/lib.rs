@@ -306,20 +306,8 @@ impl Runtime {
     }
 }
 
-/// ONNX Runtime 每个进程只允许建一次环境（ort 用只写一次的全局记录，
-/// 即使旧环境已释放也不能再建），所以全进程共用一个，并且永不释放。
 fn shared_env() -> Result<ort::environment::Environment> {
-    static ENV: Mutex<Option<ort::environment::Environment>> = Mutex::new(None);
-    let mut slot = ENV.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(env) = slot.as_ref() {
-        return Ok(env.clone());
-    }
-    let env = ort::init()
-        .with_name("english-speaker")
-        .build()
-        .map_err(engine_err)?;
-    *slot = Some(env.clone());
-    Ok(env)
+    es_onnx::shared_env().map_err(engine_err)
 }
 
 fn build_session(
@@ -335,36 +323,10 @@ fn build_session(
         .map_err(engine_err)?;
     if options.accelerator == Accelerator::Platform {
         builder = builder
-            .with_execution_providers(platform_providers())
+            .with_execution_providers(es_onnx::platform_providers())
             .map_err(engine_err)?;
     }
     builder.commit_from_file(path).map_err(engine_err)
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-fn platform_providers() -> Vec<ort::ep::ExecutionProviderDispatch> {
-    vec![ort::ep::CoreML::default().build()]
-}
-
-#[cfg(target_os = "android")]
-fn platform_providers() -> Vec<ort::ep::ExecutionProviderDispatch> {
-    vec![ort::ep::NNAPI::default().build()]
-}
-
-#[cfg(target_os = "windows")]
-fn platform_providers() -> Vec<ort::ep::ExecutionProviderDispatch> {
-    vec![ort::ep::DirectML::default().build()]
-}
-
-/// Linux 等：没有平台加速后端，使用 CPU。
-#[cfg(not(any(
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "android",
-    target_os = "windows"
-)))]
-fn platform_providers() -> Vec<ort::ep::ExecutionProviderDispatch> {
-    Vec::new()
 }
 
 fn load_vocab(path: &Path) -> Result<HashMap<char, i64>> {

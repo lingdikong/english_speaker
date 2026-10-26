@@ -48,6 +48,7 @@ import app.englishspeaker.ui.components.Segmented
 import app.englishspeaker.ui.library.ReportScroll
 import app.englishspeaker.ui.player.ReadingSettingsContent
 import app.englishspeaker.ui.player.ThemeSegment
+import app.englishspeaker.ui.translate.TranslationSettings
 import app.englishspeaker.ui.theme.LocalPalette
 import app.englishspeaker.ui.theme.Type
 import java.util.Locale
@@ -65,7 +66,7 @@ fun formatBytes(b: ULong): String {
     }
 }
 
-/** 设置 Tab：外观 · 阅读 · 朗读 · 本地缓存 · 关于。 */
+/** 设置 Tab：外观 · 阅读 · 翻译 · 朗读 · 本地缓存 · 关于。 */
 @Composable
 fun SettingsScreen(vm: AppViewModel, chrome: TabChrome) {
     val p = LocalPalette.current
@@ -85,6 +86,7 @@ fun SettingsScreen(vm: AppViewModel, chrome: TabChrome) {
         item { LargeTitle("设置") }
         item { Section("外观") { ThemeSegment(theme) { st.setTheme(it) } } }
         item { Section("阅读") { ReadingSettingsContent(vm, showTheme = false) } }
+        item { Section("翻译") { TranslationSettings(repo) } }
         item { Section("朗读") { Speech(vm) } }
         item { Section("本地缓存") { Cache(vm) } }
         item { Section("关于") { About() } }
@@ -215,6 +217,7 @@ private fun About() {
     GroupCard {
         GroupRow("版本") { Text(version, style = Type.secondary, color = p.t2) }
         GroupRow("模型") { Text("Kokoro-82M v1.0 int8", style = Type.secondary, color = p.t2) }
+        GroupRow("翻译模型") { Text("Opus-MT en-zh int8 · ECDICT", style = Type.secondary, color = p.t2) }
         GroupRow("隐私") { Text("完全离线，文章不会上传", style = Type.secondary, color = p.t2) }
         GroupRow("开源许可", divider = licenses, onClick = { licenses = !licenses }) {
             Text(if (licenses) "收起" else "查看 ›", style = Type.secondary, color = p.t2)
@@ -225,6 +228,10 @@ private fun About() {
                     "Kokoro-82M 模型 · Apache-2.0",
                     "ONNX Runtime · MIT",
                     "misaki 词典 · Apache-2.0",
+                    "Opus-MT en-zh 翻译模型 · Apache-2.0",
+                    "ECDICT 词典 · MIT",
+                    "Qwen2.5-0.5B-Instruct（按需下载）· Apache-2.0",
+                    "llama.cpp · MIT",
                     "Space Grotesk · Manrope · Noto Sans · SIL OFL 1.1",
                     "UniFFI · MPL-2.0",
                     "Haze · Apache-2.0",

@@ -160,3 +160,137 @@ impl EventListener for CollectingListener {
         self.events.lock().unwrap().push(event);
     }
 }
+
+// ---------- 翻译与查词替身 ----------
+
+/// 把每个词换成“〔词〕”：可以断言逐句都翻了，且占位符原样保留（模拟 Opus-MT 照抄专有名词）。
+#[derive(Default)]
+pub struct MockTranslator {
+    pub calls: AtomicU64,
+}
+
+impl Translator for MockTranslator {
+    fn id(&self) -> &str {
+        "mock-mt"
+    }
+
+    fn translate(&self, text: &str) -> Result<String> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(text
+            .split_whitespace()
+            .map(|w| {
+                let w = w.trim_matches(|c: char| !c.is_alphanumeric());
+                if w.starts_with("XQ") {
+                    w.to_string()
+                } else {
+                    format!("〔{w}〕")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(""))
+    }
+}
+
+/// 每个词都查得到：原形 = 去掉结尾的 s，释义为“释义<原形>”。
+pub struct MockDictionary;
+
+impl Dictionary for MockDictionary {
+    fn lookup(&self, word: &str) -> Result<Option<DictEntry>> {
+        let lemma = word.to_lowercase();
+        let lemma = lemma.strip_suffix('s').unwrap_or(&lemma).to_string();
+        Ok(Some(DictEntry {
+            inflection: (lemma != word.to_lowercase()).then(|| "复数".into()),
+            query: word.into(),
+            phonetic: format!("ˈ{lemma}"),
+            senses: vec![DictSense {
+                pos: "n.".into(),
+                meaning: format!("释义{lemma}"),
+            }],
+            tags: vec!["四级".into()],
+            collins: 3,
+            oxford: true,
+            frequency: Some(100),
+            forms: Vec::new(),
+            word: lemma,
+        }))
+    }
+}
+
+/// 模拟本地大模型：下载瞬间完成（可失败一次），按请求类型返回固定格式的结果。
+#[derive(Default)]
+pub struct MockLlm {
+    downloaded: std::sync::atomic::AtomicBool,
+    pub generations: AtomicU64,
+}
+
+impl LlmProvider for MockLlm {
+    fn model_name(&self) -> &str {
+        "Mock LLM"
+    }
+
+    fn size_bytes(&self) -> u64 {
+        1000
+    }
+
+    fn is_downloaded(&self) -> bool {
+        self.downloaded.load(Ordering::SeqCst)
+    }
+
+    fn partial_bytes(&self) -> u64 {
+        0
+    }
+
+    fn download(
+        &self,
+        progress: &mut dyn FnMut(u64, u64),
+        _cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<()> {
+        progress(500, 1000);
+        progress(1000, 1000);
+        self.downloaded.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn delete(&self) -> Result<()> {
+        self.downloaded.store(false, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn load(&self) -> Result<std::sync::Arc<dyn LanguageModel>> {
+        Ok(std::sync::Arc::new(MockModel))
+    }
+}
+
+struct MockModel;
+
+impl LanguageModel for MockModel {
+    fn id(&self) -> &str {
+        "mock-llm"
+    }
+
+    fn generate(
+        &self,
+        req: &LlmRequest<'_>,
+        _cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<String> {
+        let line = |label: &str| {
+            req.user
+                .lines()
+                .find_map(|l| l.strip_prefix(label))
+                .unwrap_or("")
+                .to_string()
+        };
+        Ok(match req.grammar {
+            Some(g) if g.contains("collocations") => format!(
+                r#"{{"pos":"n.","meaning":"语境义{}","collocations":["{w} up","{w} out"],"examples":[{{"en":"A {w}.","zh":"一个。"}}]}}"#,
+                line("单词："),
+                w = line("单词：")
+            ),
+            Some(_) => format!(
+                r#"{{"translation":"精译：{s}","structure":"主谓","points":[{{"text":"{s}","note":"y"}}]}}"#,
+                s = line("句子：")
+            ),
+            None => format!("精译：{}", line("原文：")),
+        })
+    }
+}

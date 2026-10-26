@@ -17,6 +17,9 @@
     ['wave', '转换中', { kind: 'list', filter: 'converting' }, store.counts.converting || null],
     ['bookmark', '已保存', { kind: 'list', filter: 'saved' }, store.counts.saved || null],
     ['cloud', '未转换', { kind: 'list', filter: 'unconverted' }, null],
+    ...(store.translator?.dictionary
+      ? [['star', '生词本', { kind: 'vocab' }, store.vocab.length || null] as [IconName, string, View, number | null]]
+      : []),
   ]);
 
   function same(a: View, b: View) {

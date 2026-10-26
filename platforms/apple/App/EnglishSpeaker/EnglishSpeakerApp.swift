@@ -16,6 +16,8 @@ import SwiftUI
 ///   -importTitle T -importBody B -importCommit YES   导入页预填并自动提交
 ///   -searchQuery Q             搜索框预填
 ///   -scrollTo ID               当前 Tab 滚动到指定 id（如设置页的 cache）
+///   -demoCollections YES       预置两个分类：“晨间”（前 4 篇）、“睡前故事”（第 2 篇，与晨间重叠）
+///   -openCollection NAME       资料库打开名为 NAME 的分类页
 @main
 struct EnglishSpeakerApp: App {
     @State private var store = Store()
@@ -49,6 +51,15 @@ struct EnglishSpeakerApp: App {
         func int(_ k: String) -> Int? { d.string(forKey: k).flatMap(Int.init) }
         if let i = int("pin"), let a = store.articles[safe: i] { store.setPinned(a.id, true) }
         if let i = int("removeDownload"), let a = store.articles[safe: i] { store.removeDownload(a.id) }
+        if d.bool(forKey: "demoCollections"), store.collections.isEmpty {
+            let ids = store.articles.map(\.id)
+            if let c = store.createCollection("晨间") { ids.prefix(4).forEach { store.toggleCollection(c.id, article: $0) } }
+            if let c = store.createCollection("睡前故事"), ids.count > 1 { store.toggleCollection(c.id, article: ids[1]) }
+        }
+        if let name = d.string(forKey: "openCollection"), let c = store.collections.first(where: { $0.name == name }) {
+            ui.tab = .library
+            ui.openCollection = c.id
+        }
         if d.string(forKey: "uiTestScreen") == "import" {
             try? await Task.sleep(for: .milliseconds(400))
             ui.showImport = true

@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.util.Log
 import app.englishspeaker.audio.AudioTrackSink
 import app.englishspeaker.core.Accent
+import app.englishspeaker.core.ArticleCollection
 import app.englishspeaker.core.ArticleSummary
 import app.englishspeaker.core.CacheStats
 import app.englishspeaker.core.PlayerState
@@ -46,6 +47,9 @@ class SpeakerRepository(private val context: Context) {
     val ready: StateFlow<Boolean> = _ready
     private val _articles = MutableStateFlow<List<ArticleSummary>>(emptyList())
     val articles: StateFlow<List<ArticleSummary>> = _articles
+    /** 分类（同歌单）：一篇文章可以同时在多个分类里；各自的 articleIds 按加入先后。 */
+    private val _collections = MutableStateFlow<List<ArticleCollection>>(emptyList())
+    val collections: StateFlow<List<ArticleCollection>> = _collections
     private val _player = MutableStateFlow(
         PlayerState(null, PlayerStatus.IDLE, 0u, 0u, 0u, false, 1f)
     )
@@ -194,7 +198,10 @@ class SpeakerRepository(private val context: Context) {
         scope.launch {
             do {
                 refreshDirty = false
-                val list = withContext(Dispatchers.IO) { runCatching { c.listArticles() }.getOrNull() }
+                val (list, cols) = withContext(Dispatchers.IO) {
+                    runCatching { c.listArticles() }.getOrNull() to runCatching { c.listCollections() }.getOrNull()
+                }
+                if (cols != null) _collections.value = cols
                 if (list != null) {
                     _articles.value = list
                     // 已删除的文章移出待播清单
@@ -256,6 +263,65 @@ class SpeakerRepository(private val context: Context) {
         runCatching { core?.removeDownload(id) }
         refreshArticles()
         refreshCache()
+    }
+
+    // —— 分类 ——
+
+    fun collection(id: String?): ArticleCollection? = id?.let { i -> _collections.value.firstOrNull { it.id == i } }
+
+    /** 分类里的文章，按加入顺序。 */
+    fun articlesIn(collectionId: String): List<ArticleSummary> =
+        collection(collectionId)?.articleIds.orEmpty().mapNotNull { article(it) }
+
+    /** 文章所在的全部分类。 */
+    fun collectionsOf(articleId: String): List<ArticleCollection> =
+        _collections.value.filter { articleId in it.articleIds }
+
+    /** 名称校验（与核心一致：去空白后非空、不区分大小写不重名）；合法时返回 null。 */
+    fun collectionNameError(name: String, except: String? = null): String? {
+        val n = name.trim()
+        if (n.isEmpty()) return "请输入分类名称"
+        if (_collections.value.any { it.id != except && it.name.equals(n, ignoreCase = true) }) return "已有同名分类"
+        return null
+    }
+
+    /** 新建分类；给了 articleId 时建好后把这篇加进去。 */
+    fun createCollection(name: String, adding: String? = null): ArticleCollection? {
+        val c = core ?: return null
+        val created = runCatching { c.createCollection(name) }.onFailure { Log.w(TAG, "createCollection", it) }.getOrNull()
+        if (created != null && adding != null) runCatching { c.addToCollection(adding, created.id) }
+        refreshArticles()
+        return created
+    }
+
+    fun renameCollection(id: String, name: String) {
+        runCatching { core?.renameCollection(id, name) }.onFailure { Log.w(TAG, "renameCollection", it) }
+        refreshArticles()
+    }
+
+    fun deleteCollection(id: String) {
+        runCatching { core?.deleteCollection(id) }
+        refreshArticles()
+    }
+
+    /** 已在其中则移出，否则加入（菜单里打 ✓ 的项再点一次即移出）。 */
+    fun toggleCollection(collectionId: String, articleId: String) {
+        val c = core ?: return
+        val has = collection(collectionId)?.articleIds?.contains(articleId) ?: return
+        runCatching {
+            if (has) c.removeFromCollection(articleId, collectionId) else c.addToCollection(articleId, collectionId)
+        }.onFailure { Log.w(TAG, "toggleCollection", it) }
+        refreshArticles()
+    }
+
+    fun addToCollection(collectionId: String, articleId: String) {
+        runCatching { core?.addToCollection(articleId, collectionId) }.onFailure { Log.w(TAG, "addToCollection", it) }
+        refreshArticles()
+    }
+
+    fun removeFromCollection(collectionId: String, articleId: String) {
+        runCatching { core?.removeFromCollection(articleId, collectionId) }
+        refreshArticles()
     }
 
     // —— 本地缓存 ——

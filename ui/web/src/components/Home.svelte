@@ -43,14 +43,25 @@
       <div class="row sh">
         <h2 class="h2">继续收听</h2>
       </div>
-      <div class="grid">
+      <div
+        class="grid"
+        onwheel={(e) => {
+          // 鼠标滚轮只有纵向：横向列表里转成横向滚动（触控板本身有横向分量，不处理）
+          const g = e.currentTarget;
+          if (Math.abs(e.deltaX) >= Math.abs(e.deltaY) || g.scrollWidth <= g.clientWidth) return;
+          const max = g.scrollWidth - g.clientWidth;
+          if ((e.deltaY < 0 && g.scrollLeft <= 0) || (e.deltaY > 0 && g.scrollLeft >= max)) return;
+          e.preventDefault();
+          g.scrollLeft += e.deltaY;
+        }}
+      >
         {#each conts as a (a.id)}
           {@const cur = a.id === store.player.article_id}
           {@const pos = cur ? store.position : (a.progress_ms ?? 0)}
           {@const dur = Math.max(1, cur ? store.duration : a.duration_ms || store.details[a.id]?.estimated_ms || 0)}
           {@const left = Math.max(0, Math.ceil((dur - pos) / 60000))}
           <button class="tile" class:on={cur} onclick={() => (cur ? store.toggle() : store.play(a.id))}>
-            <Thumb title={a.title} size={56} />
+            <Thumb title={a.title} size={48} />
             <div class="tt">{a.title}</div>
             <div class="ts">{left > 0 ? `剩余 ${left} 分钟` : '即将听完'}</div>
             <div class="bar"><b style:width="{Math.min(1, pos / dur) * 100}%"></b></div>
@@ -100,15 +111,16 @@
   .tile {
     position: relative;
     aspect-ratio: 1;
+    border: none; /* 按钮默认边框在 Chromium 下是一圈浅色描边 */
     border-radius: 20px;
     background: var(--card);
     box-shadow: inset 0 0 0 1px var(--line);
-    padding: 18px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
     cursor: pointer;
     overflow: hidden;
     text-align: center;
@@ -120,7 +132,10 @@
     box-shadow: inset 0 0 0 1.5px var(--accent);
     background: var(--accent-soft);
   }
+  /* 方格固定 172：48 封面 + 两行标题 36 + 剩余时间 + 进度条 + 间距 ≈ 160，不允许被压缩截断 */
   .tt {
+    flex-shrink: 0;
+    max-height: 36px;
     font-weight: 700;
     font-size: 14px;
     line-height: 18px;

@@ -20,6 +20,12 @@ enum class Tab { Home, Library, Search, Settings }
 /** 底部栏三态（UI_SPEC §4.2）。 */
 enum class BarState { A, B, C }
 
+/** 分类命名对话框的用途：新建（给了 articleId 时建好后把这篇加进去）/ 重命名。 */
+sealed interface CollectionPrompt {
+    data class Create(val articleId: String? = null) : CollectionPrompt
+    data class Rename(val id: String) : CollectionPrompt
+}
+
 /** 点词读音面板的目标：句下标 + 词下标。 */
 data class WordTarget(val sentence: Int, val word: Int)
 
@@ -48,6 +54,11 @@ class AppViewModel : ViewModel() {
     var importPrefill by mutableStateOf<Pair<String, String>?>(null)
     var importPlayNow by mutableStateOf(true)
     var libraryFilter by mutableIntStateOf(0)
+    /** 资料库里打开的分类页。 */
+    var openCollection by mutableStateOf<String?>(null)
+    /** 分类命名对话框；删除分类的确认。 */
+    var collectionPrompt by mutableStateOf<CollectionPrompt?>(null)
+    var confirmDeleteCollection by mutableStateOf<String?>(null)
     /** 截图用：强制专注模式。 */
     var forceFocus by mutableStateOf(false)
 
@@ -89,6 +100,7 @@ class AppViewModel : ViewModel() {
      * - bar：A | B | C（强制底部栏状态）
      * - autoplay / article：播放资料库第 N 篇；seekSentence：跳到第 N 句；pauseAfter：N 毫秒后暂停
      * - annotations：是否显示跟读标注；query：搜索词；wordIndex：点词面板的词下标（当前句）
+     * - demoCollections：预置两个分类“晨间”（前 4 篇）、“睡前故事”（第 2 篇，与晨间重叠）；openCollection：打开名为该值的分类页
      */
     fun applyLaunchArgs(extras: Bundle?) {
         extras ?: return
@@ -130,6 +142,20 @@ class AppViewModel : ViewModel() {
             }
         }
         extras.getString("query")?.let { searchQuery = it }
+        val openName = extras.getString("openCollection")
+        if (extras.getBoolean("demoCollections", false) || openName != null) viewModelScope.launch {
+            repo.ready.first { it }
+            val list = repo.articles.first { it.size >= 2 }
+            if (extras.getBoolean("demoCollections", false) && repo.collections.value.isEmpty()) {
+                repo.createCollection("晨间")?.let { c -> list.take(4).forEach { repo.addToCollection(c.id, it.id) } }
+                repo.createCollection("睡前故事", adding = list[1].id)
+            }
+            if (openName != null) {
+                val c = repo.collections.first { cs -> cs.any { it.name == openName } }.first { it.name == openName }
+                selectTab(Tab.Library)
+                openCollection = c.id
+            }
+        }
         val autoplay = extras.getBoolean("autoplay", false)
         val index = extras.getInt("article", 0)
         val seekSentence = extras.getInt("seekSentence", -1)

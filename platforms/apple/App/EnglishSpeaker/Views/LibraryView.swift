@@ -12,7 +12,8 @@ enum LibraryFilter: CaseIterable { case all, converting, saved, notConverted
     }
 }
 
-/// 资料库（UI_SPEC §4.4）：大标题 + 搜索/导入；筛选 chip；继续收听；全部文章。
+/// 资料库（UI_SPEC §4.4）：大标题 + 搜索/导入；筛选 chip；分类（“全部”下）；继续收听；全部文章。
+/// 点分类卡片从右侧推入分类页。
 struct LibraryView: View {
     @Environment(Store.self) private var store
     @Environment(AppUI.self) private var ui
@@ -20,6 +21,23 @@ struct LibraryView: View {
     @State private var filter: LibraryFilter = .all
 
     var body: some View {
+        ZStack {
+            library
+                .allowsHitTesting(ui.openCollection == nil)
+                .accessibilityHidden(ui.openCollection != nil)
+            if let id = ui.openCollection, let c = store.collection(id) {
+                CollectionView(collection: c)
+                    .transition(.move(edge: .trailing))
+                    .zIndex(1)
+            }
+        }
+        // 分类被删除（或在别处消失）时退回资料库
+        .onChange(of: store.collections.map(\.id)) { _, ids in
+            if let id = ui.openCollection, !ids.contains(id) { ui.openCollection = nil }
+        }
+    }
+
+    private var library: some View {
         TabScroll(tab: .library) {
             VStack(alignment: .leading, spacing: 20) {
                 HStack {
@@ -39,6 +57,7 @@ struct LibraryView: View {
                     }
                 }
                 filters
+                if filter == .all && !store.articles.isEmpty { CollectionShelf() }
                 if let a = store.barArticle { ContinueCard(article: a) }
                 VStack(alignment: .leading, spacing: 0) {
                     Text("全部文章").font(Fonts.display(20, .semibold)).padding(.bottom, 4)
@@ -48,7 +67,7 @@ struct LibraryView: View {
                             .font(Fonts.ui(14)).foregroundStyle(p.t2).padding(.vertical, 28)
                     }
                     ForEach(Array(items.enumerated()), id: \.element.id) { i, a in
-                        ArticleRow(article: a, index: i, context: items).id(a.id)
+                        ArticleRow(article: a, index: i, context: items, showCollections: true).id(a.id)
                     }
                 }
             }
@@ -83,6 +102,10 @@ struct ArticleRow: View {
     var context: [ArticleSummary]? = nil
     var titleText: AttributedString? = nil
     var snippet: AttributedString? = nil
+    /// 在该分类页里：菜单多一项“从此分类移除”。
+    var inCollection: String? = nil
+    /// 标题下注明所在分类（资料库“全部文章”）。
+    var showCollections = false
     @Environment(Store.self) private var store
     @Environment(\.palette) private var p
 
@@ -100,6 +123,13 @@ struct ArticleRow: View {
                 if let snippet {
                     Text(snippet).font(Fonts.ui(13, .medium)).foregroundStyle(p.t2).lineLimit(2).padding(.top, 4)
                 }
+                if showCollections, case let cols = store.collections(of: article.id), !cols.isEmpty {
+                    HStack(spacing: 4) {
+                        IconView(.lib, size: 11, weight: 2)
+                        Text(cols.map(\.name).joined(separator: " · ")).lineLimit(1)
+                    }
+                    .font(Fonts.ui(12, .semibold)).foregroundStyle(p.violetText).padding(.top, 4)
+                }
                 HStack(spacing: 8) {
                     Text(store.rowMeta(article)).font(Fonts.ui(13, .medium)).foregroundStyle(p.t2).lineLimit(1)
                     StatusChip(article: article)
@@ -108,7 +138,7 @@ struct ArticleRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Menu {
-                ArticleMenu(article: article)
+                ArticleMenu(article: article, inCollection: inCollection)
             } label: {
                 MoreDots().frame(width: 22, height: 22).foregroundStyle(p.t2)
                     .frame(width: 44, height: 44).contentShape(Circle())
@@ -122,17 +152,20 @@ struct ArticleRow: View {
             store.play(article.id, context: context ?? store.articles)
             store.isPlayerExpanded = true
         }
-        .contextMenu { ArticleMenu(article: article) }
+        .contextMenu { ArticleMenu(article: article, inCollection: inCollection) }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
-        .accessibilityIdentifier("row-\(index)")
+        // 分类页盖在资料库列表上：两层的行用不同前缀，自动化测试不会点到下面那层
+        .accessibilityIdentifier(inCollection == nil ? "row-\(index)" : "collection-row-\(index)")
     }
 }
 
-/// 长按 / ⋯：保存（钉住）/ 取消保存、换音色、加入待播、删除缓存、删除文章。
+/// 长按 / ⋯：保存（钉住）/ 取消保存、换音色、添加到分类、加入待播、删除缓存、删除文章。
 struct ArticleMenu: View {
     let article: ArticleSummary
+    var inCollection: String? = nil
     @Environment(Store.self) private var store
+    @Environment(AppUI.self) private var ui
 
     var body: some View {
         Button { store.setPinned(article.id, !article.pinned) } label: {
@@ -150,6 +183,23 @@ struct ArticleMenu: View {
                     }
                 }
             }
+        }
+        // 已在其中的打 ✓，再点一次即移出
+        Menu("添加到分类") {
+            ForEach(store.collections, id: \.id) { c in
+                Button { store.toggleCollection(c.id, article: article.id) } label: {
+                    if c.articleIds.contains(article.id) {
+                        Label(c.name, systemImage: "checkmark")
+                    } else {
+                        Text(c.name)
+                    }
+                }
+            }
+            Divider()
+            Button { ui.namePrompt = .create(articleId: article.id) } label: { Label("新建分类…", systemImage: "plus") }
+        }
+        if let inCollection {
+            Button { store.removeFromCollection(inCollection, article: article.id) } label: { Text("从此分类移除") }
         }
         Button { store.addToQueue(article.id, next: false) } label: { Text("加入待播清单") }
         if article.status != .notCached && article.id != store.player.articleId {

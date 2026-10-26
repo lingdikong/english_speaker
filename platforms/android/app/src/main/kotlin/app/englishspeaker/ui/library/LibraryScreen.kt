@@ -1,6 +1,10 @@
 package app.englishspeaker.ui.library
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -14,13 +18,20 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.englishspeaker.core.ArticleCollection
 import app.englishspeaker.core.AudioStatus
 import app.englishspeaker.core.PlayerStatus
 import app.englishspeaker.ui.AppViewModel
+import app.englishspeaker.ui.CollectionPrompt
 import app.englishspeaker.ui.Tab
 import app.englishspeaker.ui.TabChrome
 import app.englishspeaker.ui.components.Chip
@@ -29,13 +40,47 @@ import app.englishspeaker.ui.components.IconBtn
 import app.englishspeaker.ui.components.LargeTitle
 import app.englishspeaker.ui.icons.Icons
 import app.englishspeaker.ui.theme.LocalPalette
+import app.englishspeaker.ui.theme.LocalReduceMotion
+import app.englishspeaker.ui.theme.layoutSpring
 import app.englishspeaker.ui.theme.Type
 
 private fun AudioStatus.converting() = this == AudioStatus.QUEUED || this == AudioStatus.SYNTHESIZING || this == AudioStatus.PARTIAL
 
-/** 资料库：大标题 + 搜索 / 导入；筛选 chip；继续收听；全部文章。 */
+/** 资料库：列表之上，点分类卡片从右侧推入分类页。 */
 @Composable
 fun LibraryScreen(vm: AppViewModel, chrome: TabChrome) {
+    val repo = vm.repo
+    val collections by repo.collections.collectAsState()
+    val reduce = LocalReduceMotion.current
+    val open = collections.firstOrNull { it.id == vm.openCollection }
+    // 退出动画期间仍要画出刚关闭的分类
+    var last by remember { mutableStateOf<ArticleCollection?>(null) }
+    if (open != null) last = open
+    // 分类被删除（或在别处消失）时退回资料库
+    LaunchedEffect(collections, vm.openCollection) {
+        if (vm.openCollection != null && open == null) vm.openCollection = null
+    }
+    var drag by remember { mutableFloatStateOf(0f) }
+    Box(Modifier.fillMaxSize()) {
+        LibraryList(vm, chrome)
+        AnimatedVisibility(
+            visible = open != null,
+            enter = slideInHorizontally(layoutSpring(reduce)) { it },
+            exit = slideOutHorizontally(layoutSpring(reduce)) { it },
+        ) {
+            last?.let { c ->
+                CollectionScreen(vm, c, chrome, drag, onDrag = { drag = it }) { close ->
+                    if (close) vm.openCollection = null
+                    drag = 0f
+                }
+            }
+        }
+    }
+}
+
+/** 资料库列表：大标题 + 搜索 / 导入；筛选 chip；分类（“全部”下）；继续收听；全部文章。 */
+@Composable
+private fun LibraryList(vm: AppViewModel, chrome: TabChrome) {
     val p = LocalPalette.current
     val repo = vm.repo
     val articles by repo.articles.collectAsState()
@@ -73,6 +118,9 @@ fun LibraryScreen(vm: AppViewModel, chrome: TabChrome) {
                 }
             }
         }
+        if (vm.libraryFilter == 0 && articles.isNotEmpty()) {
+            item(key = "collections") { CollectionShelf(vm) }
+        }
         if (cont != null && vm.libraryFilter == 0) {
             item {
                 androidx.compose.foundation.layout.Box(Modifier.padding(top = 20.dp)) {
@@ -98,7 +146,10 @@ fun LibraryScreen(vm: AppViewModel, chrome: TabChrome) {
             item { Text("没有符合条件的文章", style = Type.secondary, color = p.t2, modifier = Modifier.padding(vertical = 24.dp)) }
         }
         itemsIndexed(filtered, key = { _, a -> a.id }) { i, a ->
-            ArticleRow(repo, a, i, onClick = { vm.openArticle(a, filtered.map { it.id }) })
+            ArticleRow(
+                repo, a, i, onClick = { vm.openArticle(a, filtered.map { it.id }) }, showCollections = true,
+                onNewCollection = { vm.collectionPrompt = CollectionPrompt.Create(it) },
+            )
         }
     }
 }

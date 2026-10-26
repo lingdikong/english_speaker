@@ -98,6 +98,17 @@ pub struct ArticleSummary {
     pub progress_ms: Option<u64>,
 }
 
+/// 分类（类似歌单）：一篇文章可以同时在多个分类里。
+/// 不叫 `Collection`：会与 Swift 的 `Collection` 协议、Kotlin 的 `kotlin.collections.Collection` 重名。
+#[derive(uniffi::Record)]
+pub struct ArticleCollection {
+    pub id: String,
+    pub name: String,
+    pub created_at_ms: i64,
+    /// 按加入时间先后（新加入的在后）。
+    pub article_ids: Vec<String>,
+}
+
 #[derive(uniffi::Record)]
 pub struct Article {
     pub id: String,
@@ -317,6 +328,42 @@ impl SpeakerCore {
         Ok(self.inner.delete_article(&id)?)
     }
 
+    // —— 分类 ——
+
+    pub fn list_collections(&self) -> Result<Vec<ArticleCollection>> {
+        Ok(self
+            .inner
+            .list_collections()?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    /// 名称去掉首尾空白后不能为空、不能与已有分类重名（不区分大小写）。
+    pub fn create_collection(&self, name: String) -> Result<ArticleCollection> {
+        Ok(self.inner.create_collection(&name)?.into())
+    }
+
+    pub fn rename_collection(&self, id: String, name: String) -> Result<()> {
+        Ok(self.inner.rename_collection(&id, &name)?)
+    }
+
+    /// 删除分类；其中的文章保留。
+    pub fn delete_collection(&self, id: String) -> Result<()> {
+        Ok(self.inner.delete_collection(&id)?)
+    }
+
+    /// 已在其中时不变。
+    pub fn add_to_collection(&self, article_id: String, collection_id: String) -> Result<()> {
+        Ok(self.inner.add_to_collection(&article_id, &collection_id)?)
+    }
+
+    pub fn remove_from_collection(&self, article_id: String, collection_id: String) -> Result<()> {
+        Ok(self
+            .inner
+            .remove_from_collection(&article_id, &collection_id)?)
+    }
+
     /// 全部句子文本；已合成的句子带时间（`ready = true`）。
     pub fn timeline(&self, id: String) -> Result<Timeline> {
         let t = self.inner.timeline(&id)?;
@@ -519,6 +566,17 @@ impl From<m::SourceKind> for SourceKind {
             m::SourceKind::Paste => Self::Paste,
             m::SourceKind::File => Self::File,
             m::SourceKind::Share => Self::Share,
+        }
+    }
+}
+
+impl From<m::Collection> for ArticleCollection {
+    fn from(c: m::Collection) -> Self {
+        Self {
+            id: c.id,
+            name: c.name,
+            created_at_ms: c.created_at_ms,
+            article_ids: c.article_ids,
         }
     }
 }

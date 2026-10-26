@@ -92,6 +92,16 @@ pub struct ArticleSummary {
     pub progress_ms: Option<u64>,
 }
 
+/// 分类（类似歌单）：一篇文章可以同时在多个分类里。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Collection {
+    pub id: String,
+    pub name: String,
+    pub created_at_ms: i64,
+    /// 分类里的文章，按加入时间先后（同歌单，新加入的排在后面）。
+    pub article_ids: Vec<ArticleId>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Accent {

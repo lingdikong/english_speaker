@@ -58,6 +58,23 @@ pub trait Storage: Send + Sync {
     fn set_pinned(&self, id: &str, pinned: bool) -> Result<()>;
     fn list_sentences(&self, article_id: &str) -> Result<Vec<SentenceRecord>>;
 
+    // —— 分类 ——
+    /// 按创建时间升序，各自带上文章（按加入时间升序）。
+    fn list_collections(&self) -> Result<Vec<Collection>>;
+    /// 只写入分类本身（`article_ids` 忽略）。
+    fn insert_collection(&self, collection: &Collection) -> Result<()>;
+    fn rename_collection(&self, id: &str, name: &str) -> Result<()>;
+    /// 删除分类；文章本身保留（只是不再属于它）。
+    fn delete_collection(&self, id: &str) -> Result<()>;
+    /// 把文章加入分类；已在其中时不变（保留原加入时间）。分类或文章不存在时返回 `NotFound`。
+    fn add_to_collection(
+        &self,
+        collection_id: &str,
+        article_id: &str,
+        added_at_ms: i64,
+    ) -> Result<()>;
+    fn remove_from_collection(&self, collection_id: &str, article_id: &str) -> Result<()>;
+
     // —— 缓存池 ——
     fn get_cache_entry(&self, article_id: &str) -> Result<Option<CacheEntry>>;
     fn list_cache_entries(&self) -> Result<Vec<CacheEntry>>;

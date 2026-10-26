@@ -1,6 +1,7 @@
 <script lang="ts">
-  // 右侧原文面板 460（UI_SPEC §5 / §3.4）：当前句卡片 + 逐词高亮 + 跟读标注；当前句固定在约 35% 高度；
-  // 手动滚动后暂停自动跟随，3 秒后或点“回到当前句”恢复。
+  // 原文（UI_SPEC §5 / §3.4）：当前句卡片 + 逐词高亮 + 跟读标注；当前句固定在约 35% 高度；
+  // 每一句的字号、字重、跟读标注与内边距都相同，当前句只换颜色和底色——切句时排版不跳动；
+  // 手动滚动后暂停自动跟随，3 秒后或点“回到当前句”恢复。放在播放页右栏（透明底、字号放大）。
   import { untrack } from 'svelte';
   import type { SentenceSpan } from '../lib/types';
   import { store } from '../lib/store.svelte';
@@ -62,8 +63,9 @@
     return { links, weak };
   });
 
-  function wordClass(s: SentenceSpan, i: number): string {
-    const c: string[] = [word == null || i > word ? 'up' : i === word ? 'now' : 'read'];
+  /** 非当前句不读 `word`：逐词推进时只有当前句的词需要重算。 */
+  function wordClass(s: SentenceSpan, i: number, on: boolean): string {
+    const c: string[] = on ? [word == null || i > word ? 'up' : i === word ? 'now' : 'read'] : [];
     if (notes) {
       const n = s.words[i].notes;
       const prev = i > 0 ? s.words[i - 1].notes : undefined;
@@ -156,7 +158,7 @@
         sentence: s,
         wordIndex: Number(wEl.dataset.w),
         rect: wEl.getBoundingClientRect(),
-        box: wEl.closest('.card')?.getBoundingClientRect(),
+        box: wEl.closest('.line')?.getBoundingClientRect(),
       };
       e.stopPropagation();
       return;
@@ -170,11 +172,12 @@
   let aaOpen = $state(false);
 </script>
 
-<aside class="tp fade-panel" aria-label="原文">
-  <i class="split" style="left:0"></i>
+<aside class="tp" aria-label="原文">
   <div class="row head">
       <div class="label">
-        原文{#if t && cur != null}&nbsp;· 第 {cur + 1} / {t.sentences.length} 句{/if}
+        原文{#if t && cur != null}&nbsp;· 第 {cur + 1} / {t.sentences.length} 句{/if}{#if notes && stats.links}<span
+            class="st violet">&nbsp;· {stats.links} 处连读</span
+          >{/if}{#if notes && stats.weak}&nbsp;· {stats.weak} 个弱读{/if}
       </div>
       <div class="row" style="gap:8px;position:relative">
         <button class="chip muted" class:on={aaOpen} aria-label="阅读设置" aria-expanded={aaOpen} onclick={() => (aaOpen = !aaOpen)}>
@@ -210,39 +213,27 @@
         ontouchmove={userScrolled}
         onpointerdown={(e) => e.target === scroller && userScrolled()}
       >
-        <div class="spacer" style:height="{padTop - 18}px" aria-hidden="true"></div>
+        <div class="spacer" style:height="{padTop - 4}px" aria-hidden="true"></div>
         {#each t.sentences as s (s.index)}
           {@const para = s.index > 0 && s.paragraph !== t.sentences[s.index - 1].paragraph}
-          {#if s.index === cur}
-            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-            <div class="card" class:para data-i={s.index} onclick={(e) => clickSentence(e, s)}>
-              <div class="tx cur">
-                {#if !s.words.length}{s.text}{:else}{#each segments(s) as seg}{#if seg.kind === 'gap'}{#if notes && seg.link && !seg.text.trim()}<span
-                          class="lk">‿</span
-                        >{:else}{seg.text}{#if notes && seg.link}<span class="lk">‿</span>{/if}{/if}{:else}<span
-                        class="w {wordClass(s, seg.i)}"
-                        data-w={seg.i}>{seg.text}</span
-                      >{/if}{/each}{/if}
-              </div>
-              {#if notes && (stats.links || stats.weak)}
-                <div class="row chips">
-                  {#if stats.links}<span class="chip violet">{stats.links} 处连读</span>{/if}
-                  {#if stats.weak}<span class="chip muted">{stats.weak} 个弱读</span>{/if}
-                </div>
-              {/if}
-            </div>
-          {:else}
-            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-            <div
-              class="tx oth {s.ready ? 'sent-other' : 'sent-pending'}"
-              class:para
-              data-i={s.index}
-              title={s.ready ? undefined : '尚未转换'}
-              onclick={(e) => clickSentence(e, s)}
-            >
-              {s.text}
-            </div>
-          {/if}
+          {@const on = s.index === cur}
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <div
+            class="line tx"
+            class:on
+            class:pending={!s.ready}
+            class:para
+            data-i={s.index}
+            title={s.ready ? undefined : '尚未转换'}
+            onclick={(e) => clickSentence(e, s)}
+          >
+            {#if !s.words.length}{s.text}{:else}{#each segments(s) as seg}{#if seg.kind === 'gap'}{#if notes && seg.link && !seg.text.trim()}<span
+                      class="lk">‿</span
+                    >{:else}{seg.text}{#if notes && seg.link}<span class="lk">‿</span>{/if}{/if}{:else}<span
+                    class="w {wordClass(s, seg.i, on)}"
+                    data-w={seg.i}>{seg.text}</span
+                  >{/if}{/each}{/if}
+          </div>
         {/each}
         <div class="spacer" style:height="{padBottom}px" aria-hidden="true"></div>
       </div>
@@ -254,11 +245,12 @@
 </aside>
 
 <style>
+  /* 铺满播放页右栏、透明底 */
   .tp {
     position: relative;
-    width: 460px;
-    flex-shrink: 0;
-    padding: 24px 0 0;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -296,62 +288,79 @@
     padding: 0 28px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 4px;
     scrollbar-width: none;
+    /* 顶部渐隐：滚上去的句子在标题行下方淡出 */
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 48px);
+    mask-image: linear-gradient(to bottom, transparent, #000 48px);
   }
   .scroller::-webkit-scrollbar {
     display: none;
   }
-  .oth {
-    font-size: var(--tx-oth);
-    line-height: var(--tx-oth-lh);
-    cursor: pointer;
-    border-radius: 10px;
-    transition: color 0.25s;
-  }
-  .oth.sent-other:hover {
-    color: var(--t2);
-  }
-  .oth.sent-pending {
-    cursor: default;
-  }
   .spacer {
     flex-shrink: 0;
   }
-  .para {
-    margin-top: 12px;
+  /* 每一句同字号、同字重、同内边距：当前句只换颜色与卡片底，换句时文字不重排。
+     字号 = 阅读设置的当前句字号 × 1.1（播放页留白大，略放大）。 */
+  .line {
+    flex-shrink: 0;
+    font-size: calc(var(--tx-cur) * 1.1);
+    line-height: calc(var(--tx-cur-lh) * 1.1);
+    padding: 14px 18px;
+    margin: 0 -18px;
+    border-radius: 22px;
+    color: var(--other);
+    cursor: pointer;
+    transition:
+      color 0.3s,
+      background-color 0.3s,
+      box-shadow 0.3s;
   }
-  .card {
-    padding: 16px 18px;
-    border-radius: 18px;
+  .line:not(.on):not(.pending):hover {
+    color: var(--t2);
+  }
+  .line.pending {
+    color: var(--pending);
+    cursor: default;
+  }
+  .line.on {
+    color: var(--t1);
     background: var(--card);
     box-shadow:
       inset 0 0 0 1px var(--accent-soft),
       var(--elev);
   }
-  .cur {
-    font-size: var(--tx-cur);
-    line-height: var(--tx-cur-lh);
+  /* 非当前句的跟读标注跟着整句调暗 */
+  .line:not(.on) :global(.lk) {
+    opacity: 0.5;
   }
-  .w {
-    cursor: pointer;
-    transition:
-      color 0.2s,
-      background-color 0.2s;
+  .line:not(.on) :global(.dot) {
+    border-bottom-color: color-mix(in srgb, var(--violet) 40%, transparent);
   }
-  .w.up:hover,
-  .w.read:hover {
-    color: var(--t1);
-    background: var(--glass-edge);
-    border-radius: 6px;
+  .line:not(.on) :global(.weak) {
+    color: inherit;
   }
-  .chips {
-    gap: 8px;
+  .para {
     margin-top: 12px;
   }
-  .chips .chip {
-    height: 26px;
-    font-size: 12px;
+  .st {
+    color: var(--violet-text);
+  }
+  .w {
+    transition:
+      color 0.2s,
+      background-color 0.2s,
+      box-shadow 0.2s;
+  }
+  .on .w {
+    cursor: pointer;
+  }
+  .on .w.up:hover,
+  .on .w.read:hover {
+    color: var(--t1);
+    background: var(--glass-edge);
+    box-shadow: 0 0 0 3px var(--glass-edge);
+    border-radius: 6px;
   }
   .empty {
     padding: 60px 28px;
@@ -363,7 +372,7 @@
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    bottom: 110px;
+    bottom: 40px;
     height: 34px;
     box-shadow: var(--glass-shadow);
     z-index: 3;

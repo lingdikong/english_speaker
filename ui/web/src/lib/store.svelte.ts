@@ -5,6 +5,7 @@ import type {
   Article,
   ArticleSummary,
   CacheStats,
+  Collection,
   CoreEvent,
   HostInfo,
   PlayerState,
@@ -15,7 +16,12 @@ import type {
 } from './types';
 
 export type ListFilter = 'all' | 'converting' | 'saved' | 'unconverted';
-export type View = { kind: 'home' } | { kind: 'list'; filter: ListFilter } | { kind: 'search' } | { kind: 'settings' };
+export type View =
+  | { kind: 'home' }
+  | { kind: 'list'; filter: ListFilter }
+  | { kind: 'collection'; id: string }
+  | { kind: 'search' }
+  | { kind: 'settings' };
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -29,7 +35,6 @@ export interface Prefs {
   showNotes: boolean;
   defaultVoice: string | null;
   defaultRate: number;
-  panel: boolean;
   volume: number;
 }
 
@@ -41,11 +46,13 @@ const DEFAULT_PREFS: Prefs = {
   showNotes: true,
   defaultVoice: null,
   defaultRate: 1,
-  panel: true,
   volume: 1,
 };
 
 export const RATES = [0.75, 1, 1.25, 1.5];
+
+/** 拖动文章行时 dataTransfer 的类型（拖到分类卡片上即移入）。 */
+export const ARTICLE_MIME = 'application/x-es-article';
 
 export interface MenuItem {
   label?: string;
@@ -70,7 +77,9 @@ export interface Confirm {
   body: string;
   ok: string;
   danger?: boolean;
-  action: () => void;
+  /** 带输入框（新建 / 重命名分类）：初始值与占位文字；确定时把输入内容交给 action。 */
+  input?: { value: string; placeholder: string; validate?: (value: string) => string | null };
+  action: (value: string) => void | Promise<unknown>;
 }
 
 const IDLE: PlayerState = {
@@ -113,6 +122,7 @@ const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
 class Store {
   articles = $state<ArticleSummary[]>([]);
+  collections = $state<Collection[]>([]);
   loaded = $state(false);
   voices = $state<Voice[]>([]);
   host = $state<HostInfo>({ host: 'unknown', volume: 1, rate_supported: false, engine: '' });
@@ -139,6 +149,10 @@ class Store {
   /** 拖入窗口的文件：打开导入对话框时预填。 */
   importFile = $state<{ name: string; text: string } | null>(null);
   queueOpen = $state(false);
+  /** 全屏播放页（点播放条封面打开）。 */
+  playerOpen = $state(false);
+  /** 播放页开合动画的小球：播放条封面的中心与半径（开 / 合前量好，避免动画开始时强制布局）。 */
+  playerOrigin = { x: 0, y: 0, r: 19 };
   readingOpen = $state(false);
   /** 单句循环（客户端：离开该句时跳回句首）。 */
   loop = $state(false);
@@ -201,14 +215,16 @@ class Store {
 
   async init() {
     onEvent((e) => this.handle(e));
-    const [articles, voices, player, cache, host] = await Promise.all([
+    const [articles, collections, voices, player, cache, host] = await Promise.all([
       invoke<ArticleSummary[]>('list_articles'),
+      invoke<Collection[]>('list_collections'),
       invoke<Voice[]>('voices'),
       invoke<PlayerState>('player_state'),
       invoke<CacheStats>('cache_stats'),
       invoke<HostInfo>('host_info').catch(() => null),
     ]);
     this.articles = articles;
+    this.collections = collections;
     this.voices = voices;
     this.cache = cache;
     if (host) this.host = host;
@@ -228,7 +244,13 @@ class Store {
   refreshLibrary() {
     clearTimeout(this.refreshTimer);
     this.refreshTimer = window.setTimeout(async () => {
-      this.articles = await invoke<ArticleSummary[]>('list_articles');
+      [this.articles, this.collections] = await Promise.all([
+        invoke<ArticleSummary[]>('list_articles'),
+        invoke<Collection[]>('list_collections'),
+      ]);
+      // 正在看的分类被删除：回到全部文章
+      const v = this.view;
+      if (v.kind === 'collection' && !this.collections.some((c) => c.id === v.id)) this.view = { kind: 'list', filter: 'all' };
       const ids = new Set(this.articles.map((a) => a.id));
       const q = this.queue.filter((id) => ids.has(id));
       if (q.length !== this.queue.length) this.setQueue(q);
@@ -304,11 +326,17 @@ class Store {
 
   private applyPlayer(state: PlayerState) {
     const prev = this.player;
+    const prevPos = this.pos.position_ms;
     this.player = state;
     if (state.status !== 'playing') {
       this.pos = { ...this.pos, position_ms: state.position_ms, buffered_ms: state.buffered_ms, at: performance.now() };
     }
     if (state.article_id && state.article_id !== prev.article_id) {
+      // 换篇时核心会写入上一篇的进度，但已转换完的文章不会触发 library_changed：
+      // 先按最后位置更新本地进度，再刷新资料库，否则“继续收听”里上一篇的进度停在旧值（常为 0 而消失）。
+      const old = prev.article_id ? this.article(prev.article_id) : null;
+      if (old) old.progress_ms = prev.status === 'ended' ? 0 : prevPos;
+      this.refreshLibrary();
       this.loopIndex = null;
       this.loadTimeline(state.article_id);
     }
@@ -390,8 +418,27 @@ class Store {
     this.setPref('showNotes', !this.prefs.showNotes);
   }
 
-  togglePanel() {
-    this.setPref('panel', !this.prefs.panel);
+  openPlayer() {
+    if (!this.player.article_id) return;
+    this.measureOrigin();
+    this.queueOpen = false;
+    this.playerOpen = true;
+  }
+
+  closePlayer() {
+    this.measureOrigin();
+    this.queueOpen = false;
+    this.popover = null;
+    this.playerOpen = false;
+  }
+
+  /** 小球位置：播放条封面中心；找不到时退到窗口底部中央。 */
+  private measureOrigin() {
+    const r = document.querySelector('[data-player-origin]')?.getBoundingClientRect();
+    this.playerOrigin =
+      r && r.width
+        ? { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width / 2 }
+        : { x: window.innerWidth / 2, y: window.innerHeight - 46, r: 19 };
   }
 
   // ---------- 播放控制 ----------
@@ -544,6 +591,113 @@ class Store {
     this.play(next);
   }
 
+  // ---------- 分类 ----------
+
+  collection(id: string) {
+    return this.collections.find((c) => c.id === id) ?? null;
+  }
+
+  /** 分类里的文章，按加入顺序（同歌单）。 */
+  inCollection(id: string) {
+    const ids = this.collection(id)?.article_ids ?? [];
+    return ids.map((x) => this.article(x)).filter((a) => a != null);
+  }
+
+  /** 文章所在的全部分类。 */
+  collectionsOf(articleId: string) {
+    return this.collections.filter((c) => c.article_ids.includes(articleId));
+  }
+
+  /** 分类名校验（与核心一致：去空白后非空、不区分大小写不重名）。 */
+  private nameError(name: string, except?: string): string | null {
+    const n = name.trim().toLowerCase();
+    if (!n) return '请输入分类名称';
+    if (this.collections.some((c) => c.id !== except && c.name.toLowerCase() === n)) return '已有同名分类';
+    return null;
+  }
+
+  /** 弹出命名对话框新建分类；给了 articleId 时建好后把这篇加进去。 */
+  newCollection(articleId?: string) {
+    this.confirm = {
+      title: '新建分类',
+      body: articleId ? '建好后会把这篇文章加进去。' : '把文章整理到分类里，像歌单一样一起听。一篇文章可以放进多个分类。',
+      ok: '创建',
+      input: { value: '', placeholder: '分类名称，如“新闻”“睡前故事”', validate: (v) => this.nameError(v) },
+      action: async (name) => {
+        const c = await invoke<Collection>('create_collection', { name });
+        if (articleId) await invoke('add_to_collection', { id: articleId, collection_id: c.id });
+        this.refreshLibrary();
+        if (articleId) this.flash(`已添加到“${c.name}”`);
+      },
+    };
+  }
+
+  renameCollection(c: Collection) {
+    this.confirm = {
+      title: '重命名分类',
+      body: '',
+      ok: '保存',
+      input: { value: c.name, placeholder: '分类名称', validate: (v) => this.nameError(v, c.id) },
+      action: async (name) => {
+        await invoke('rename_collection', { id: c.id, name });
+        this.refreshLibrary();
+      },
+    };
+  }
+
+  deleteCollection(c: Collection) {
+    const n = this.inCollection(c.id).length;
+    this.confirm = {
+      title: '删除分类？',
+      body: n ? `“${c.name}”里的 ${n} 篇文章不会被删除，只是不再属于这个分类。` : `删除空分类“${c.name}”。`,
+      ok: '删除',
+      danger: true,
+      action: async () => {
+        await invoke('delete_collection', { id: c.id });
+        this.refreshLibrary();
+      },
+    };
+  }
+
+  async addToCollection(articleId: string, collectionId: string) {
+    const c = this.collection(collectionId);
+    if (!c) return;
+    if (c.article_ids.includes(articleId)) {
+      this.flash(`已在“${c.name}”中`);
+      return;
+    }
+    if (!(await this.guard(() => invoke('add_to_collection', { id: articleId, collection_id: collectionId })))) return;
+    c.article_ids.push(articleId);
+    this.flash(`已添加到“${c.name}”`);
+    this.refreshLibrary();
+  }
+
+  async removeFromCollection(articleId: string, collectionId: string) {
+    const c = this.collection(collectionId);
+    if (!c) return;
+    if (!(await this.guard(() => invoke('remove_from_collection', { id: articleId, collection_id: collectionId })))) return;
+    c.article_ids = c.article_ids.filter((x) => x !== articleId);
+    this.flash(`已从“${c.name}”移除`);
+    this.refreshLibrary();
+  }
+
+  /** 播放分类：从第一篇开始，其余依次排进待播清单。 */
+  playCollection(id: string) {
+    const [first, ...rest] = this.inCollection(id).map((a) => a.id);
+    if (!first) return;
+    this.setQueue(rest);
+    this.play(first);
+  }
+
+  collectionMenu(c: Collection): MenuItem[] {
+    return [
+      { label: '播放全部', action: () => this.playCollection(c.id), disabled: !this.inCollection(c.id).length },
+      { label: '重命名', action: () => this.renameCollection(c) },
+      { separator: true },
+      { label: '删除分类', danger: true, action: () => this.deleteCollection(c) },
+    ];
+  }
+
   // ---------- 资料库操作 ----------
 
   async importText(body: string, opts: { title?: string; sourceRef?: string; voice?: string | null; play?: boolean }) {
@@ -613,8 +767,8 @@ class Store {
     }
   }
 
-  /** 文章的更多操作（⋯ / 右键）。 */
-  articleMenu(a: ArticleSummary): MenuItem[] {
+  /** 文章的更多操作（⋯ / 右键）；在分类页里（inCollection）多一项“从此分类移除”。 */
+  articleMenu(a: ArticleSummary, inCollection?: string): MenuItem[] {
     const converting = isConverting(a);
     return [
       { label: '播放', action: () => this.play(a.id) },
@@ -629,6 +783,22 @@ class Store {
         : a.status === 'ready' || a.status === 'partial'
           ? { label: '删除缓存', action: () => this.removeDownload(a.id), disabled: a.cached_bytes === 0 }
           : { label: a.status === 'failed' ? '重试转换' : '开始转换', action: () => this.synthesize(a.id) },
+      {
+        // 已在其中的打 ✓，再点一次即移出
+        label: '添加到分类',
+        submenu: [
+          ...this.collections.map((c) => {
+            const has = c.article_ids.includes(a.id);
+            return {
+              label: c.name,
+              checked: has,
+              action: () => (has ? this.removeFromCollection(a.id, c.id) : this.addToCollection(a.id, c.id)),
+            };
+          }),
+          { label: '新建分类…', action: () => this.newCollection(a.id) },
+        ],
+      },
+      ...(inCollection ? [{ label: '从此分类移除', action: () => this.removeFromCollection(a.id, inCollection) }] : []),
       {
         label: '换音色',
         submenu: this.voices.map((v) => ({

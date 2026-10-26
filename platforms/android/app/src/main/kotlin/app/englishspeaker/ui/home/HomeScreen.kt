@@ -74,7 +74,10 @@ fun HomeScreen(vm: AppViewModel, chrome: TabChrome) {
         }
         item { Text("最近添加", style = Type.section, color = p.t1, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp)) }
         itemsIndexed(recent, key = { _, a -> a.id }) { i, a ->
-            ArticleRow(repo, a, i, onClick = { vm.openArticle(a, recent.map { it.id }) })
+            ArticleRow(
+                repo, a, i, onClick = { vm.openArticle(a, recent.map { it.id }) },
+                onNewCollection = { vm.collectionPrompt = app.englishspeaker.ui.CollectionPrompt.Create(it) },
+            )
         }
     }
 }

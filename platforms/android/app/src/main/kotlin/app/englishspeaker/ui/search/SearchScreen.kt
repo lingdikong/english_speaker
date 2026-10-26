@@ -105,7 +105,10 @@ fun SearchScreen(vm: AppViewModel, chrome: TabChrome) {
             item { Text("${results.size} 篇文章", style = Type.section, color = p.t1, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)) }
         }
         itemsIndexed(results, key = { _, r -> r.first.id }) { i, (a, snippet) ->
-            ArticleRow(repo, a, i, onClick = { vm.openArticle(a, results.map { it.first.id }) }, query = query, snippet = snippet)
+            ArticleRow(
+                repo, a, i, onClick = { vm.openArticle(a, results.map { it.first.id }) }, query = query, snippet = snippet,
+                onNewCollection = { vm.collectionPrompt = app.englishspeaker.ui.CollectionPrompt.Create(it) },
+            )
         }
     }
 }

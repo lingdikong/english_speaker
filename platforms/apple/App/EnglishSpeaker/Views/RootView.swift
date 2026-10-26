@@ -24,6 +24,13 @@ final class AppUI {
     var tab: AppTab = .library
     var bar: BarState = .a
     var showImport = false
+    /// 资料库里打开的分类页。
+    var openCollection: String?
+    /// 分类命名对话框（新建 / 重命名）及其输入、校验错误；删除分类的确认。
+    var namePrompt: CollectionPrompt?
+    var promptText = ""
+    var promptError: String?
+    var confirmDelete: String?
     /// 每个 Tab 自己的滚动容器的偏移。
     @ObservationIgnored private var offsets: [AppTab: CGFloat] = [:]
     /// 调试：请求某个 Tab 滚动到指定行（截图 / 自动化）。
@@ -94,6 +101,7 @@ struct RootView: View {
                 PlayerView(collapse: $playerCollapse).themed()
             }
         }
+        .modifier(CollectionDialogs())
         .sheet(isPresented: $ui.showImport) {
             ImportSheet().themed()
         }

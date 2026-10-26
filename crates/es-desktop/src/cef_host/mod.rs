@@ -49,6 +49,9 @@ pub struct Shared {
     browser: Mutex<Option<Browser>>,
     /// 主窗口（无边框窗口控制按钮用）。只在 UI 线程访问其内容。
     window: Mutex<Option<Window>>,
+    /// 最大化前的窗口位置（还原用）。无边框窗口不依赖系统 maximize / is_maximized
+    /// （各平台对无边框窗口的支持不一致），由宿主自己铺满可用区域并记住原位置。
+    restore_bounds: Mutex<Option<Rect>>,
     /// 桥接请求按序交给工作线程处理，不阻塞 UI 线程。
     queries: Mutex<Option<mpsc::Sender<Query>>>,
 }
@@ -103,6 +106,7 @@ pub fn run(opts: HostOptions) -> Result<i32, Box<dyn std::error::Error>> {
         router: BrowserSideRouter::new(MessageRouterConfig::default()),
         browser: Mutex::new(None),
         window: Mutex::new(None),
+        restore_bounds: Mutex::new(None),
         queries: Mutex::new(None),
     });
     let _ = SHARED.set(shared.clone());
@@ -244,18 +248,38 @@ wrap_task! {
             let Some(window) = shared.window.lock().unwrap().clone() else { return };
             match self.cmd.as_str() {
                 "window_minimize" => window.minimize(),
-                "window_maximize" => {
-                    if window.is_maximized() != 0 {
-                        window.restore();
-                    } else {
-                        window.maximize();
-                    }
-                }
+                "window_maximize" => toggle_maximize(shared, &window),
                 // 与 ⌘Q 同一路径：有序关闭浏览器 → on_before_close → 退出消息循环
                 "window_close" => shared.close_all(),
                 _ => {}
             }
         }
+    }
+}
+
+/// 最大化 / 还原：铺满所在屏幕的可用区域（除去菜单栏、Dock / 任务栏），再点还原到之前的位置。
+/// 判断依据是窗口当前是否铺满可用区域，而不是记录的标志：用户拖动或缩放过就重新算作未最大化。
+fn toggle_maximize(shared: &Shared, window: &Window) {
+    let Some(area) = window.display().map(|d| d.work_area()) else {
+        return;
+    };
+    let cur = window.bounds();
+    let filled = (cur.x - area.x).abs() <= 2
+        && (cur.y - area.y).abs() <= 2
+        && (cur.width - area.width).abs() <= 2
+        && (cur.height - area.height).abs() <= 2;
+    let mut saved = shared.restore_bounds.lock().unwrap();
+    if filled {
+        let back = saved.take().unwrap_or(Rect {
+            x: area.x + area.width / 8,
+            y: area.y + area.height / 8,
+            width: area.width * 3 / 4,
+            height: area.height * 3 / 4,
+        });
+        window.set_bounds(Some(&back));
+    } else {
+        *saved = Some(cur);
+        window.set_bounds(Some(&area));
     }
 }
 

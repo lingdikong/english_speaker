@@ -20,6 +20,15 @@ export interface ArticleSummary {
   progress_ms: number | null;
 }
 
+/** 分类（类似歌单）：一篇文章可以同时在多个分类里。 */
+export interface Collection {
+  id: string;
+  name: string;
+  created_at_ms: number;
+  /** 按加入时间先后（新加入的在后）。 */
+  article_ids: string[];
+}
+
 export interface Article {
   id: string;
   title: string;

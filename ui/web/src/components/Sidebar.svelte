@@ -20,6 +20,8 @@
   ]);
 
   function same(a: View, b: View) {
+    // 分类页属于“全部文章”
+    if (a.kind === 'collection') return b.kind === 'list' && b.filter === 'all';
     if (a.kind !== b.kind) return false;
     return a.kind !== 'list' || a.filter === (b as { filter: ListFilter }).filter;
   }

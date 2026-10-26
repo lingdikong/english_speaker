@@ -1,12 +1,20 @@
 <script lang="ts">
-  // 文章表格（UI_SPEC §5）：封面 48 / 标题 / 音色 / 时长 / 状态（+ 悬停时的 ⋯）。点按行播放，右键 / ⋯ 打开更多操作。
+  // 文章表格（UI_SPEC §5）：封面 48 / 标题 / 音色 / 时长 / 状态（+ 悬停时的 ⋯）。点按行播放，右键 / ⋯ 打开更多操作；
+  // 行可拖到分类卡片上移入分类。
   import type { ArticleSummary } from '../lib/types';
-  import { store } from '../lib/store.svelte';
+  import { store, ARTICLE_MIME } from '../lib/store.svelte';
   import { MORE } from '../lib/icons';
   import Thumb from './Thumb.svelte';
+  import Icon from './Icon.svelte';
   import StatusChip from './StatusChip.svelte';
 
-  let { items, query = '' }: { items: ArticleSummary[]; query?: string } = $props();
+  /** showCollections：标题下注明所在分类（全部文章页）；collectionId：在该分类页里，菜单多一项“从此分类移除”。 */
+  let {
+    items,
+    query = '',
+    showCollections = false,
+    collectionId,
+  }: { items: ArticleSummary[]; query?: string; showCollections?: boolean; collectionId?: string } = $props();
 
   /** 命中片段：正文中第一个匹配处前后各取一段。 */
   function snippet(a: ArticleSummary, q: string): [string, string, string] | null {
@@ -37,14 +45,20 @@
     {@const now = store.player.article_id === a.id && store.player.status !== 'idle'}
     {@const tp = q ? parts(a.title, q) : null}
     {@const sn = q && !tp ? snippet(a, q) : null}
+    {@const cols = showCollections ? store.collectionsOf(a.id) : []}
     <div
       class="tr"
       class:now
       role="row"
       tabindex="0"
+      draggable="true"
+      ondragstart={(e) => {
+        e.dataTransfer!.setData(ARTICLE_MIME, a.id);
+        e.dataTransfer!.effectAllowed = 'copy';
+      }}
       onclick={() => store.play(a.id)}
       onkeydown={(e) => e.key === 'Enter' && store.play(a.id)}
-      oncontextmenu={(e) => store.openMenu(e, store.articleMenu(a))}
+      oncontextmenu={(e) => store.openMenu(e, store.articleMenu(a, collectionId))}
     >
       <Thumb title={a.title} size={48} color={now || i % 2 === 0 ? 'var(--accent)' : 'var(--violet)'} />
       <span class="title-cell" role="cell">
@@ -52,6 +66,7 @@
           {#if tp}{tp[0]}<mark>{tp[1]}</mark>{tp[2]}{:else}{a.title}{/if}
         </span>
         {#if sn}<span class="snip">{sn[0]}<mark>{sn[1]}</mark>{sn[2]}</span>{/if}
+        {#if cols.length}<span class="col"><Icon name="lib" size={12} stroke={2} />{cols.map((c) => c.name).join(' · ')}</span>{/if}
       </span>
       <span class="sub c-voice" role="cell">{store.voiceText(a)}</span>
       <span class="sub c-dur" role="cell">{store.durationText(a)}</span>
@@ -62,7 +77,7 @@
         onclick={(e) => {
           e.stopPropagation();
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          store.menu = { x: r.right - 210, y: r.bottom + 4, items: store.articleMenu(a) };
+          store.menu = { x: r.right - 210, y: r.bottom + 4, items: store.articleMenu(a, collectionId) };
         }}>{@html MORE}</button
       >
     </div>
@@ -130,6 +145,18 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .col {
+    display: block;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--violet-text);
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   mark {
     background: var(--accent-soft);

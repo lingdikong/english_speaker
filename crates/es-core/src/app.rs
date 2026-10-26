@@ -227,6 +227,75 @@ impl AppCore {
         Ok(())
     }
 
+    // ---------- 分类 ----------
+
+    pub fn list_collections(&self) -> Result<Vec<Collection>> {
+        self.shared.storage.list_collections()
+    }
+
+    /// 新建分类。名称去掉首尾空白后不能为空、不能与已有分类重名（不区分大小写）。
+    pub fn create_collection(&self, name: &str) -> Result<Collection> {
+        let name = self.collection_name(name, None)?;
+        let c = Collection {
+            id: uuid::Uuid::new_v4().to_string(),
+            name,
+            created_at_ms: now_ms(),
+            article_ids: Vec::new(),
+        };
+        self.shared.storage.insert_collection(&c)?;
+        self.shared.emit(CoreEvent::LibraryChanged);
+        Ok(c)
+    }
+
+    pub fn rename_collection(&self, id: &str, name: &str) -> Result<()> {
+        let name = self.collection_name(name, Some(id))?;
+        self.shared.storage.rename_collection(id, &name)?;
+        self.shared.emit(CoreEvent::LibraryChanged);
+        Ok(())
+    }
+
+    /// 删除分类；其中的文章保留在资料库（只是不再属于它）。
+    pub fn delete_collection(&self, id: &str) -> Result<()> {
+        self.shared.storage.delete_collection(id)?;
+        self.shared.emit(CoreEvent::LibraryChanged);
+        Ok(())
+    }
+
+    /// 把文章加入分类（一篇可在多个分类里）；已在其中时不变。
+    pub fn add_to_collection(&self, article_id: &str, collection_id: &str) -> Result<()> {
+        self.shared
+            .storage
+            .add_to_collection(collection_id, article_id, now_ms())?;
+        self.shared.emit(CoreEvent::LibraryChanged);
+        Ok(())
+    }
+
+    /// 从分类中移除文章（文章本身保留）。
+    pub fn remove_from_collection(&self, article_id: &str, collection_id: &str) -> Result<()> {
+        self.shared
+            .storage
+            .remove_from_collection(collection_id, article_id)?;
+        self.shared.emit(CoreEvent::LibraryChanged);
+        Ok(())
+    }
+
+    fn collection_name(&self, name: &str, except: Option<&str>) -> Result<String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(CoreError::InvalidInput("collection name is empty".into()));
+        }
+        let taken = self
+            .list_collections()?
+            .iter()
+            .any(|c| Some(c.id.as_str()) != except && c.name.to_lowercase() == name.to_lowercase());
+        if taken {
+            return Err(CoreError::InvalidInput(format!(
+                "collection \"{name}\" already exists"
+            )));
+        }
+        Ok(name.to_string())
+    }
+
     /// 完整原文时间轴：全部句子文本，已合成的带时间。
     pub fn timeline(&self, id: &str) -> Result<Timeline> {
         let complete = self

@@ -305,6 +305,47 @@ fn change_voice_and_delete() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 分类：重名校验；一篇文章可同时在多个分类里；删除分类不删文章；重启后仍在。
+#[test]
+fn collections_many_to_many() {
+    let dir = temp_dir("collections");
+    let (a, c1) = {
+        let h = harness(&dir, 0, Default::default(), None);
+        let a = import(&h.app, ARTICLE);
+        let c1 = h.app.create_collection("  News ").unwrap();
+        assert_eq!(c1.name, "News");
+        assert!(
+            h.app.create_collection("news").is_err(),
+            "重名（不区分大小写）"
+        );
+        assert!(h.app.create_collection("   ").is_err());
+        let c2 = h.app.create_collection("Stories").unwrap();
+        assert!(h.app.rename_collection(&c2.id, "NEWS").is_err());
+        h.app.rename_collection(&c1.id, "News").unwrap(); // 改成自己的名字不算重名
+
+        h.app.add_to_collection(&a, &c1.id).unwrap();
+        h.app.add_to_collection(&a, &c2.id).unwrap();
+        assert!(h.app.add_to_collection(&a, "missing").is_err());
+        let both = h.app.list_collections().unwrap();
+        assert!(both.iter().all(|c| c.article_ids == vec![a.clone()]));
+
+        h.app.delete_collection(&c2.id).unwrap();
+        assert_eq!(h.app.list_articles().unwrap().len(), 1, "文章保留");
+        (a, c1)
+    };
+    let h = harness(&dir, 0, Default::default(), None);
+    let list = h.app.list_collections().unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(
+        (list[0].id.as_str(), &list[0].article_ids),
+        (c1.id.as_str(), &vec![a.clone()])
+    );
+    h.app.remove_from_collection(&a, &c1.id).unwrap();
+    assert!(h.app.list_collections().unwrap()[0].article_ids.is_empty());
+    drop(h);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// 时间轴中带有连读/弱读标注，并随缓存持久化。
 #[test]
 fn connected_speech_notes_in_timeline() {

@@ -33,6 +33,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.englishspeaker.ios
         PRODUCT_NAME: EnglishSpeaker
+        # 真机签名团队（只用于 App 本身；UI 测试沿用工程级的空值）
+        DEVELOPMENT_TEAM: FZTBD5Y6SU
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: English Speaker
@@ -57,7 +59,11 @@ targets:
           - NotoSans-Regular.ttf
           - NotoSans-Medium.ttf
         CFBundleDisplayName: English Speaker
-        UILaunchScreen: {}
+        # 启动画面：Assets 里的 LaunchBackground 底色 + LaunchLogo 居中图标（夜间 / 白天各一套）
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: LaunchLogo
+          UIImageRespectsSafeAreaInsets: true
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

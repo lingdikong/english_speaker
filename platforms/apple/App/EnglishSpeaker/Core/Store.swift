@@ -25,6 +25,8 @@ final class Store {
 
     // —— 资料库 ——
     var articles: [ArticleSummary] = []
+    /// 分类（同歌单）：一篇文章可以同时在多个分类里；各自的 articleIds 按加入先后。
+    var collections: [ArticleCollection] = []
     var bodies: [String: String] = [:]
     var voices: [Voice] = []
     var cache: CacheStats?
@@ -176,6 +178,7 @@ final class Store {
     func reloadLibrary() {
         guard let core else { return }
         articles = (try? core.listArticles()) ?? articles
+        collections = (try? core.listCollections()) ?? collections
         cache = try? core.cacheStats()
         for a in articles where bodies[a.id] == nil {
             bodies[a.id] = try? core.getArticle(id: a.id).body
@@ -447,6 +450,70 @@ final class Store {
         try? core?.deleteArticle(id: id)
         upNext.removeAll { $0 == id }
         reloadLibrary()
+    }
+
+    // MARK: 分类
+
+    func collection(_ id: String) -> ArticleCollection? { collections.first { $0.id == id } }
+
+    /// 分类里的文章，按加入顺序。
+    func articles(in collectionId: String) -> [ArticleSummary] {
+        (collection(collectionId)?.articleIds ?? []).compactMap(article)
+    }
+
+    /// 文章所在的全部分类。
+    func collections(of articleId: String) -> [ArticleCollection] {
+        collections.filter { $0.articleIds.contains(articleId) }
+    }
+
+    /// 名称校验（与核心一致：去空白后非空、不区分大小写不重名）；合法时返回 nil。
+    func collectionNameError(_ name: String, except: String? = nil) -> String? {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if n.isEmpty { return "请输入分类名称" }
+        if collections.contains(where: { $0.id != except && $0.name.lowercased() == n }) { return "已有同名分类" }
+        return nil
+    }
+
+    /// 新建分类；给了 articleId 时建好后把这篇加进去。
+    @discardableResult
+    func createCollection(_ name: String, adding articleId: String? = nil) -> ArticleCollection? {
+        guard let core, let c = try? core.createCollection(name: name) else { return nil }
+        if let articleId { try? core.addToCollection(articleId: articleId, collectionId: c.id) }
+        reloadLibrary()
+        return c
+    }
+
+    func renameCollection(_ id: String, to name: String) {
+        try? core?.renameCollection(id: id, name: name)
+        reloadLibrary()
+    }
+
+    func deleteCollection(_ id: String) {
+        try? core?.deleteCollection(id: id)
+        reloadLibrary()
+    }
+
+    /// 已在其中则移出，否则加入（菜单里打 ✓ 的项再点一次即移出）。
+    func toggleCollection(_ collectionId: String, article articleId: String) {
+        guard let c = collection(collectionId) else { return }
+        if c.articleIds.contains(articleId) {
+            try? core?.removeFromCollection(articleId: articleId, collectionId: collectionId)
+        } else {
+            try? core?.addToCollection(articleId: articleId, collectionId: collectionId)
+        }
+        reloadLibrary()
+    }
+
+    func removeFromCollection(_ collectionId: String, article articleId: String) {
+        try? core?.removeFromCollection(articleId: articleId, collectionId: collectionId)
+        reloadLibrary()
+    }
+
+    /// 播放分类：从第一篇开始，其余依次排进待播清单。
+    func playCollection(_ id: String) {
+        let items = articles(in: id)
+        guard let first = items.first else { return }
+        play(first.id, context: items)
     }
 
     func addToQueue(_ id: String, next: Bool) {

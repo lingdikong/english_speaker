@@ -6,6 +6,7 @@
 //! - `cache_entries`  缓存池：每篇一条，状态 / 大小 / 最近访问时间（LRU 依据）
 //! - `progress`       播放进度
 //! - `settings`       键值设置（缓存上限等）
+//! - `collections`    分类（类似歌单）；`collection_articles` 记录文章与分类的多对多关系
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -17,7 +18,8 @@ use es_core::{CoreError, Result};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
 /// 按顺序执行的迁移脚本；下标 + 1 即 `PRAGMA user_version`。
-const MIGRATIONS: &[&str] = &[r#"
+const MIGRATIONS: &[&str] = &[
+    r#"
 CREATE TABLE articles (
     id             TEXT PRIMARY KEY,
     title          TEXT NOT NULL,
@@ -69,7 +71,22 @@ CREATE TABLE settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-"#];
+"#,
+    r#"
+CREATE TABLE collections (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL
+);
+CREATE TABLE collection_articles (
+    collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    article_id    TEXT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    added_at_ms   INTEGER NOT NULL,
+    PRIMARY KEY (collection_id, article_id)
+) WITHOUT ROWID;
+CREATE INDEX collection_articles_article ON collection_articles(article_id);
+"#,
+];
 
 const CLEAR_CHUNKS: &str =
     "UPDATE sentences SET byte_offset = NULL, byte_len = NULL, start_frame = NULL,
@@ -326,6 +343,118 @@ impl Storage for SqliteStorage {
         if n == 0 {
             return Err(CoreError::NotFound(id.into()));
         }
+        Ok(())
+    }
+
+    fn list_collections(&self) -> Result<Vec<Collection>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, created_at_ms FROM collections ORDER BY created_at_ms, rowid",
+            )
+            .map_err(db_err)?;
+        let mut list = stmt
+            .query_map([], |r| {
+                Ok(Collection {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    created_at_ms: r.get(2)?,
+                    article_ids: Vec::new(),
+                })
+            })
+            .map_err(db_err)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(db_err)?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT collection_id, article_id FROM collection_articles
+                 ORDER BY added_at_ms, article_id",
+            )
+            .map_err(db_err)?;
+        let members = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+            .map_err(db_err)?;
+        for m in members {
+            let (cid, aid) = m.map_err(db_err)?;
+            if let Some(c) = list.iter_mut().find(|c| c.id == cid) {
+                c.article_ids.push(aid);
+            }
+        }
+        Ok(list)
+    }
+
+    fn insert_collection(&self, c: &Collection) -> Result<()> {
+        self.conn
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO collections (id, name, created_at_ms) VALUES (?1, ?2, ?3)",
+                params![c.id, c.name, c.created_at_ms],
+            )
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    fn rename_collection(&self, id: &str, name: &str) -> Result<()> {
+        let n = self
+            .conn
+            .lock()
+            .unwrap()
+            .execute(
+                "UPDATE collections SET name = ?2 WHERE id = ?1",
+                params![id, name],
+            )
+            .map_err(db_err)?;
+        if n == 0 {
+            return Err(CoreError::NotFound(id.into()));
+        }
+        Ok(())
+    }
+
+    fn delete_collection(&self, id: &str) -> Result<()> {
+        self.conn
+            .lock()
+            .unwrap()
+            .execute("DELETE FROM collections WHERE id = ?1", [id])
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    fn add_to_collection(
+        &self,
+        collection_id: &str,
+        article_id: &str,
+        added_at_ms: i64,
+    ) -> Result<()> {
+        self.conn
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT OR IGNORE INTO collection_articles (collection_id, article_id, added_at_ms)
+                 VALUES (?1, ?2, ?3)",
+                params![collection_id, article_id, added_at_ms],
+            )
+            .map_err(|e| match e {
+                // 外键失败：分类或文章不存在
+                rusqlite::Error::SqliteFailure(f, _)
+                    if f.code == rusqlite::ErrorCode::ConstraintViolation =>
+                {
+                    CoreError::NotFound(format!("{collection_id} / {article_id}"))
+                }
+                e => db_err(e),
+            })?;
+        Ok(())
+    }
+
+    fn remove_from_collection(&self, collection_id: &str, article_id: &str) -> Result<()> {
+        self.conn
+            .lock()
+            .unwrap()
+            .execute(
+                "DELETE FROM collection_articles WHERE collection_id = ?1 AND article_id = ?2",
+                params![collection_id, article_id],
+            )
+            .map_err(db_err)?;
         Ok(())
     }
 
@@ -713,6 +842,69 @@ mod tests {
             .collect();
         assert_eq!(ids, vec!["old", "new"]);
         assert_eq!(s.cache_usage().unwrap(), (300, 100, 4));
+    }
+
+    #[test]
+    fn collections() {
+        let s = SqliteStorage::open_in_memory().unwrap();
+        for id in ["a1", "a2", "a3"] {
+            let (a, spans) = article(id, 1);
+            s.insert_article(&a, &spans).unwrap();
+        }
+        let c = |id: &str, name: &str, t| Collection {
+            id: id.into(),
+            name: name.into(),
+            created_at_ms: t,
+            article_ids: Vec::new(),
+        };
+        s.insert_collection(&c("c2", "Later", 2)).unwrap();
+        s.insert_collection(&c("c1", "News", 1)).unwrap();
+        s.rename_collection("c1", "Daily news").unwrap();
+        assert!(s.rename_collection("nope", "x").is_err());
+
+        // 一篇文章可以同时在多个分类里；分类内按加入时间排序；重复加入不改变顺序
+        s.add_to_collection("c1", "a2", 10).unwrap();
+        s.add_to_collection("c1", "a1", 20).unwrap();
+        s.add_to_collection("c2", "a1", 30).unwrap();
+        s.add_to_collection("c1", "a2", 40).unwrap();
+        assert!(matches!(
+            s.add_to_collection("missing", "a1", 50),
+            Err(CoreError::NotFound(_))
+        ));
+        assert!(matches!(
+            s.add_to_collection("c1", "gone", 50),
+            Err(CoreError::NotFound(_))
+        ));
+        let members = |s: &SqliteStorage| {
+            s.list_collections()
+                .unwrap()
+                .into_iter()
+                .map(|c| (c.name, c.article_ids))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            members(&s),
+            vec![
+                (
+                    "Daily news".to_string(),
+                    vec!["a2".to_string(), "a1".to_string()]
+                ),
+                ("Later".to_string(), vec!["a1".to_string()]),
+            ]
+        );
+
+        s.remove_from_collection("c1", "a2").unwrap();
+        s.remove_from_collection("c1", "a2").unwrap(); // 不在其中也不报错
+                                                       // 删除文章：从所有分类里消失
+        s.delete_article("a1").unwrap();
+        // 删除分类：文章保留
+        s.add_to_collection("c2", "a3", 60).unwrap();
+        s.delete_collection("c2").unwrap();
+        assert_eq!(
+            members(&s),
+            vec![("Daily news".to_string(), Vec::<String>::new())]
+        );
+        assert_eq!(s.list_articles().unwrap().len(), 2);
     }
 
     #[test]

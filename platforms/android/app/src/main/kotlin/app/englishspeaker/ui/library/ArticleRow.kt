@@ -88,7 +88,9 @@ fun StatusChip(repo: SpeakerRepository, a: ArticleSummary) {
 
 /**
  * 资料库行：56 封面 · 标题 15/700 · “时长 · 音色” + 状态 chip · 更多（⋯）。
- * 长按或 ⋯：保存 / 取消保存、换音色、删除缓存、删除文章。
+ * 长按或 ⋯：保存 / 取消保存、换音色、添加到分类、删除缓存、删除文章。
+ * [inCollection]：在该分类页里，菜单多一项“从此分类移除”；[showCollections]：标题下注明所在分类；
+ * [onNewCollection]：菜单里“新建分类…”（参数为这篇文章的 id，建好后把它加进去）。
  */
 @Composable
 fun ArticleRow(
@@ -98,9 +100,13 @@ fun ArticleRow(
     onClick: () -> Unit,
     query: String? = null,
     snippet: String? = null,
+    inCollection: String? = null,
+    showCollections: Boolean = false,
+    onNewCollection: ((String) -> Unit)? = null,
 ) {
     val p = LocalPalette.current
     var menu by remember { mutableStateOf(false) }
+    val collections by repo.collections.collectAsState()
     Row(
         Modifier
             .fillMaxWidth()
@@ -120,6 +126,14 @@ fun ArticleRow(
             if (snippet != null) {
                 HighlightText(snippet, query, Type.secondary, p.t2, p.accentSoft, p.accentText, Modifier.padding(top = 4.dp), maxLines = 2)
             }
+            val cols = if (showCollections) collections.filter { a.id in it.articleIds } else emptyList()
+            if (cols.isNotEmpty()) {
+                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.line("lib", 2f), null, Modifier.size(11.dp), tint = p.violetText)
+                    Text(cols.joinToString(" · ") { it.name }, style = Type.secondary.copy(fontSize = 12.sp), color = p.violetText,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
             Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(metaText(repo, a), style = Type.secondary, color = p.t2, maxLines = 1)
                 StatusChip(repo, a)
@@ -127,28 +141,52 @@ fun ArticleRow(
         }
         Box {
             IconBtn(Icons.more, "更多操作", tint = p.t2) { menu = true }
-            RowMenu(repo, a, menu) { menu = false }
+            RowMenu(repo, a, menu, inCollection, onNewCollection) { menu = false }
         }
     }
 }
 
 @Composable
-private fun RowMenu(repo: SpeakerRepository, a: ArticleSummary, expanded: Boolean, onDismiss: () -> Unit) {
+private fun RowMenu(
+    repo: SpeakerRepository,
+    a: ArticleSummary,
+    expanded: Boolean,
+    inCollection: String?,
+    onNewCollection: ((String) -> Unit)?,
+    onDismiss: () -> Unit,
+) {
     val p = LocalPalette.current
+    // 二级菜单：换音色 / 添加到分类（在同一个下拉里切换内容）
     var voices by remember { mutableStateOf(false) }
+    var cols by remember { mutableStateOf(false) }
     val list by repo.voices.collectAsState()
+    val collections by repo.collections.collectAsState()
     DropdownMenu(
         expanded = expanded,
-        onDismissRequest = { voices = false; onDismiss() },
+        onDismissRequest = { voices = false; cols = false; onDismiss() },
         containerColor = p.surface,
         shape = RoundedCornerShape(16.dp),
     ) {
         @Composable
         fun item(text: String, color: androidx.compose.ui.graphics.Color = p.t1, action: () -> Unit) =
             DropdownMenuItem(text = { Text(text, style = Type.body, color = color) }, onClick = action)
-        if (!voices) {
+        if (cols) {
+            // 已在其中的打 ✓（accent），再点一次即移出
+            collections.forEach { c ->
+                val has = a.id in c.articleIds
+                item(if (has) "✓  ${c.name}" else c.name, if (has) p.accentText else p.t1) {
+                    repo.toggleCollection(c.id, a.id); cols = false; onDismiss()
+                }
+            }
+            if (onNewCollection != null) {
+                if (collections.isNotEmpty()) HorizontalDivider(color = p.line)
+                item("新建分类…") { cols = false; onDismiss(); onNewCollection(a.id) }
+            }
+        } else if (!voices) {
             item(if (a.pinned) "取消保存" else "保存（离线保留）") { repo.setPinned(a.id, !a.pinned); onDismiss() }
             item("换音色") { voices = true }
+            item("添加到分类") { cols = true }
+            if (inCollection != null) item("从此分类移除") { repo.removeFromCollection(inCollection, a.id); onDismiss() }
             if (a.cachedBytes > 0u) item("删除缓存") { repo.removeDownload(a.id); onDismiss() }
             HorizontalDivider(color = p.line)
             item("删除文章", p.dangerText) { repo.delete(a.id); onDismiss() }

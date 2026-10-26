@@ -154,6 +154,7 @@ fun AppRoot(vm: AppViewModel) {
             }
 
             if (vm.showImport) ImportSheet(vm) { vm.showImport = false }
+            app.englishspeaker.ui.library.CollectionDialogs(vm)
             if (vm.showUpNext) UpNextSheet(vm) { vm.showUpNext = false }
             if (vm.showReading) ReadingSettingsSheet(vm) { vm.showReading = false }
             vm.word?.let { w -> WordSheet(vm, w) { vm.word = null } }

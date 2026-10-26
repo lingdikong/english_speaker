@@ -55,6 +55,25 @@ pub enum Request {
         id: String,
     },
     ClearCache,
+    ListCollections,
+    CreateCollection {
+        name: String,
+    },
+    RenameCollection {
+        id: String,
+        name: String,
+    },
+    DeleteCollection {
+        id: String,
+    },
+    AddToCollection {
+        id: String,
+        collection_id: String,
+    },
+    RemoveFromCollection {
+        id: String,
+        collection_id: String,
+    },
     PlayArticle {
         id: String,
     },
@@ -167,6 +186,24 @@ impl Bridge {
                 Value::Null
             }
             Request::ClearCache => to_value(app.clear_cache()?),
+            Request::ListCollections => to_value(app.list_collections()?),
+            Request::CreateCollection { name } => to_value(app.create_collection(&name)?),
+            Request::RenameCollection { id, name } => {
+                app.rename_collection(&id, &name)?;
+                Value::Null
+            }
+            Request::DeleteCollection { id } => {
+                app.delete_collection(&id)?;
+                Value::Null
+            }
+            Request::AddToCollection { id, collection_id } => {
+                app.add_to_collection(&id, &collection_id)?;
+                Value::Null
+            }
+            Request::RemoveFromCollection { id, collection_id } => {
+                app.remove_from_collection(&id, &collection_id)?;
+                Value::Null
+            }
             Request::PlayArticle { id } => {
                 app.play_article(&id)?;
                 Value::Null

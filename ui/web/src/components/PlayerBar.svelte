@@ -1,6 +1,6 @@
 <script lang="ts">
   // 悬浮玻璃播放条（UI_SPEC §5）：药丸形，高 60，宽 min(1080, 窗口 − 48)，相对整个窗口水平居中，bottom 16，最上层。
-  // 左：单句循环 · 上一句 · 播放/暂停 · 下一句 · 倍速；中：封面 · 标题 · 声波进度；右：原文 · 待播 · 跟读标注 · 音量。
+  // 左：单句循环 · 上一句 · 播放/暂停 · 下一句 · 倍速；中：封面（点击展开播放页）· 标题 · 声波进度；右：待播 · 音量。
   import { store, fmtTime } from '../lib/store.svelte';
   import { G } from '../lib/icons';
   import Thumb from './Thumb.svelte';
@@ -66,7 +66,19 @@
 
   <div class="row mid">
     {#if a}
-      <Thumb title={a.title} size={38} />
+      <button
+        class="art"
+        data-player-origin
+        aria-label="打开播放页"
+        title="打开播放页"
+        aria-expanded={store.playerOpen}
+        onclick={() => store.openPlayer()}
+      >
+        <Thumb title={a.title} size={38} />
+        <span class="expand" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6" /></svg>
+        </span>
+      </button>
       <div class="info">
         <div class="row" style="gap:10px;min-width:0">
           <span class="ttl">{a.title}</span>
@@ -90,27 +102,11 @@
   <div class="row" style="gap:6px">
     <button
       class="gbtn"
-      class:on={store.prefs.panel}
-      aria-label="原文"
-      aria-pressed={store.prefs.panel}
-      title="原文面板"
-      onclick={() => store.togglePanel()}>{@html G.lyrics}</button
-    >
-    <button
-      class="gbtn"
       data-queue-btn
       aria-label="待播清单"
       aria-expanded={store.queueOpen}
       title="待播清单"
       onclick={() => (store.queueOpen = !store.queueOpen)}>{@html G.queue}</button
-    >
-    <button
-      class="gbtn"
-      class:on={store.prefs.showNotes}
-      aria-label={store.prefs.showNotes ? '跟读标注（已开启）' : '跟读标注'}
-      aria-pressed={store.prefs.showNotes}
-      title="跟读标注"
-      onclick={() => store.toggleNotes()}>{@html G.annot}</button
     >
     <div class="vol-wrap" role="group" aria-label="音量" onmouseenter={volEnter} onmouseleave={volLeave}>
       <button
@@ -139,7 +135,7 @@
   </div>
 </div>
 
-{#if store.queueOpen}<UpNext />{/if}
+{#if store.queueOpen && !store.playerOpen}<UpNext />{/if}
 
 <style>
   .glassbar {
@@ -177,9 +173,6 @@
   .gbtn:disabled {
     opacity: 0.4;
     cursor: default;
-  }
-  .gbtn.on {
-    color: var(--violet);
   }
   .gbtn.main {
     width: 44px;
@@ -226,6 +219,37 @@
   }
   .times > span {
     white-space: nowrap;
+  }
+  /* 封面：播放页入口。悬停时轻微放大并浮出“展开”箭头 */
+  .art {
+    position: relative;
+    padding: 0;
+    border: none;
+    background: none;
+    border-radius: 8px;
+    flex-shrink: 0;
+    transition: transform 0.35s var(--spring);
+  }
+  .art:hover {
+    transform: scale(1.08);
+  }
+  .art:active {
+    transform: scale(0.96);
+  }
+  .expand {
+    position: absolute;
+    inset: 0;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    color: var(--t1);
+    opacity: 0;
+    transition: opacity 0.18s;
+  }
+  .art:hover .expand,
+  .art:focus-visible .expand {
+    opacity: 1;
   }
   .idle {
     width: 38px;

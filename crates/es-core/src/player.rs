@@ -468,11 +468,13 @@ impl Worker {
 
     fn save_progress(&self) {
         if let Some(l) = &self.loaded {
-            if let Err(e) = self
-                .shared
-                .storage
-                .save_progress(&l.article_id, self.position_ms())
-            {
+            // 已播完的文章进度记为 0（结尾时已写过 0）；否则换篇 / 停止时会再写入一次结尾位置把它覆盖掉
+            let ms = if self.status == PlayerStatus::Ended {
+                0
+            } else {
+                self.position_ms()
+            };
+            if let Err(e) = self.shared.storage.save_progress(&l.article_id, ms) {
                 log::warn!("save progress failed: {e}");
             }
         }

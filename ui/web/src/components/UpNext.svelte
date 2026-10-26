@@ -16,11 +16,14 @@
       .slice(0, 3),
   );
 
+  /** 在播放页里打开：贴着右上角的待播按钮弹出，而不是播放条上方。 */
+  let { inPlayer = false }: { inPlayer?: boolean } = $props();
+
   let dragFrom = $state<number | null>(null);
   let dragOver = $state<number | null>(null);
 </script>
 
-<div class="upnext popup" role="dialog" aria-label="待播清单" transition:fly={{ y: 12, duration: dur(220) }}>
+<div class="upnext popup" class:in-player={inPlayer} role="dialog" aria-label="待播清单" transition:fly={{ y: inPlayer ? -12 : 12, duration: dur(220) }}>
   <div class="row hd">
     <div class="h2" style="font-size:18px">待播清单</div>
     {#if items.length}<button class="link" onclick={() => store.setQueue([])}>清空</button>{/if}
@@ -98,6 +101,12 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+  .upnext.in-player {
+    top: 92px;
+    right: 32px;
+    bottom: auto;
+    max-height: min(560px, calc(100vh - 140px));
   }
   .hd {
     justify-content: space-between;

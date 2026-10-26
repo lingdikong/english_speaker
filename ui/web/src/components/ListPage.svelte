@@ -1,8 +1,10 @@
 <script lang="ts">
   // 文章列表：全部 / 转换中 / 已保存 / 未转换（侧栏导航与筛选 chip 同步），以及搜索结果（标题 + 正文，命中处高亮）。
+  // “全部文章”顶部是分类（同歌单），下面是全部文章。
   import { store, isConverting, type ListFilter } from '../lib/store.svelte';
   import Icon from './Icon.svelte';
   import ArticleTable from './ArticleTable.svelte';
+  import CollectionShelf from './CollectionShelf.svelte';
 
   let { filter, search = false }: { filter: ListFilter; search?: boolean } = $props();
 
@@ -39,10 +41,13 @@
   <h1 class="h1">{search ? `搜索“${store.search.trim()}”` : TITLES[filter]}</h1>
   <button class="play row imp" onclick={() => (store.importOpen = true)}><Icon name="plus" size={16} stroke={2.4} />导入文章</button>
 </div>
-
+{#if filter === 'all' && !search && store.loaded}
+  <CollectionShelf />
+  {#if items.length}<h2 class="h2 sh">文章</h2>{/if}
+{/if}
 
 {#if items.length}
-  <ArticleTable {items} query={search ? store.search : ''} />
+  <ArticleTable {items} query={search ? store.search : ''} showCollections={!search} />
 {:else if store.loaded}
   <div class="empty">{search ? '没有找到匹配的文章。' : EMPTY[filter]}</div>
 {/if}
@@ -64,6 +69,9 @@
     gap: 8px;
     font-weight: 700;
     font-size: 14px;
+  }
+  .sh {
+    padding-top: 6px;
   }
   .empty {
     padding: 60px 12px;

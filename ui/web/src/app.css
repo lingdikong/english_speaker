@@ -388,8 +388,9 @@ input[type='range'].slider::-webkit-slider-thumb {
 .tx .now {
   color: var(--accent-text);
   background: var(--accent-soft);
-  border-radius: 9px;
-  padding: 1px 6px;
+  border-radius: 6px;
+  /* 外扩用 box-shadow 而不是 padding：不占位，逐词推进时前后的词不会被挤动 */
+  box-shadow: 0 0 0 4px var(--accent-soft);
 }
 .tx .weak {
   font-size: 0.84em;

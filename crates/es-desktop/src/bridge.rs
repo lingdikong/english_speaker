@@ -94,6 +94,49 @@ pub enum Request {
     },
     Stop,
     PlayerState,
+    // ---- 翻译与查词 ----
+    TranslatorStatus,
+    Translations {
+        id: String,
+    },
+    PrepareTranslations {
+        id: String,
+    },
+    LookupWord {
+        word: String,
+    },
+    WordInsight {
+        id: String,
+        sentence: u32,
+        word: u32,
+    },
+    SentenceAnalysis {
+        id: String,
+        sentence: u32,
+    },
+    SetSmartTranslation {
+        enabled: bool,
+    },
+    DownloadLlm,
+    CancelLlmDownload,
+    DeleteLlm,
+    ListGlossary,
+    AddGlossaryTerm {
+        term: String,
+        translation: String,
+    },
+    RemoveGlossaryTerm {
+        term: String,
+    },
+    ListVocab,
+    AddVocab {
+        id: String,
+        sentence: u32,
+        word: u32,
+    },
+    RemoveVocab {
+        word: String,
+    },
     // ---- 宿主侧（不经核心层） ----
     /// 宿主信息：宿主类型、TTS 引擎、音量、是否支持变速。
     HostInfo,
@@ -241,6 +284,51 @@ impl Bridge {
                 Value::Null
             }
             Request::PlayerState => to_value(app.player_state()),
+            Request::TranslatorStatus => to_value(app.translator_status()),
+            Request::Translations { id } => to_value(app.translations(&id)?),
+            Request::PrepareTranslations { id } => {
+                app.prepare_translations(&id)?;
+                Value::Null
+            }
+            Request::LookupWord { word } => to_value(app.lookup_word(&word)?),
+            Request::WordInsight { id, sentence, word } => {
+                to_value(app.word_insight(&id, sentence, word)?)
+            }
+            Request::SentenceAnalysis { id, sentence } => {
+                to_value(app.sentence_analysis(&id, sentence)?)
+            }
+            Request::SetSmartTranslation { enabled } => {
+                app.set_smart_translation(enabled)?;
+                to_value(app.translator_status())
+            }
+            Request::DownloadLlm => {
+                app.download_llm()?;
+                Value::Null
+            }
+            Request::CancelLlmDownload => {
+                app.cancel_llm_download();
+                Value::Null
+            }
+            Request::DeleteLlm => {
+                app.delete_llm()?;
+                Value::Null
+            }
+            Request::ListGlossary => to_value(app.list_glossary()?),
+            Request::AddGlossaryTerm { term, translation } => {
+                to_value(app.add_glossary_term(&term, &translation)?)
+            }
+            Request::RemoveGlossaryTerm { term } => {
+                app.remove_glossary_term(&term)?;
+                Value::Null
+            }
+            Request::ListVocab => to_value(app.list_vocab()?),
+            Request::AddVocab { id, sentence, word } => {
+                to_value(app.add_vocab(&id, sentence, word)?)
+            }
+            Request::RemoveVocab { word } => {
+                app.remove_vocab(&word)?;
+                Value::Null
+            }
             Request::HostInfo => json!({
                 "host": self.host.host,
                 // 无边框窗口按系统习惯摆放窗口按钮：macos 左上角红绿灯，其余右上角

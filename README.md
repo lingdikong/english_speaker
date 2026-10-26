@@ -45,6 +45,7 @@ Windows · macOS · Linux · iOS · Android
 - **边听边转**：导入文章后立刻开始转换，像在线播放一样一边合成一边收听；合成追不上时自动缓冲，中断后从断点续转。
 - **本地缓存池**：音频按句分块写入本地，SQLite 记录索引；LRU 自动淘汰，“已保存”的文章永久保留，上限可在设置里调整。
 - **逐词高亮 + 跟读标注**：原文跟随朗读逐词高亮，并标出连读（`pick‿it‿up`）、弱读、闪音、同化与省音；点任意词查看 IPA 与中文说明。
+- **离线翻译与查词（双模）**：默认“极速翻译”——Opus-MT 整句翻译 + ECDICT 离线词典（随包内置，毫秒级），可开双语对照；设置里打开“智能翻译”后按需下载 Qwen2.5-0.5B（约 409MB），获得术语表精修、点词“举一反三”和句子解析。另有生词本与术语表。详见 [docs/TRANSLATION.md](docs/TRANSLATION.md)。
 - **为长时专注设计**：夜间“石墨”/ 白天“柔灰”双主题，对比度控制在 7–14:1；当前句固定在视线高度；专注模式自动收起控件。
 - **一套核心，五个平台**：业务逻辑全部在 Rust 核心层，各平台只负责界面与放声音。
 
@@ -56,7 +57,7 @@ Windows · macOS · Linux · iOS · Android
 └───────────────┬───────────────────────────────────────┘
                 │  UniFFI（Swift / Kotlin） · JSON 桥（桌面）
 ┌───────────────┴──────────── Rust 核心层 ──────────────┐
-│ es-core      文章、句子切分、连读分析、调度、播放状态机 │
+│ es-core      文章、句子切分、连读分析、调度、播放状态机、翻译调度 │
 │ es-tts-kokoro  Kokoro 推理（ONNX Runtime）+ misaki G2P │
 │ es-storage   SQLite 缓存池     es-audio   PCM 分块编解码 │
 │ es-runtime   组装   es-ffi  移动端绑定   es-desktop 桌面宿主 │
@@ -73,7 +74,7 @@ Windows · macOS · Linux · iOS · Android
 
 ## 快速开始
 
-需要：Rust 1.88+；iOS 需要 Xcode 16+ 与 [xcodegen](https://github.com/yonaskolb/XcodeGen)；Android 需要 Android SDK/NDK 与 `cargo-ndk`；桌面 Web 界面需要 Node.js 20+。
+需要：Rust 1.88+、cmake（编译 llama.cpp）；iOS 需要 Xcode 16+ 与 [xcodegen](https://github.com/yonaskolb/XcodeGen)；Android 需要 Android SDK/NDK 与 `cargo-ndk`；桌面 Web 界面需要 Node.js 20+。
 
 ```bash
 git clone https://github.com/lingdikong/english_speaker.git
@@ -102,6 +103,8 @@ platforms/apple  iOS App（SwiftUI）与 SpeakerCore Swift Package
 platforms/android Android App（Jetpack Compose）
 ui/web           桌面端 Web 界面（Svelte），运行在 CEF 中
 models/kokoro    Kokoro-82M int8 模型、音色与 G2P 词典
+models/opus-mt-en-zh  Opus-MT 英→中翻译模型（int8）
+models/dict      ECDICT 核心词库（SQLite）
 docs/            架构、界面规范、设计稿与截图
 scripts/         构建与模型下载脚本
 ```

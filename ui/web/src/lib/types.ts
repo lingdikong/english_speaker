@@ -107,6 +107,83 @@ export interface CacheStats {
   entries: number;
 }
 
+// ---------- 翻译与查词（es-core model.rs “翻译与查词”） ----------
+
+/** fast = 机器翻译（内置），smart = 本地大模型（按需下载）。 */
+export type TranslationEngine = 'fast' | 'smart';
+
+export interface SentenceTranslation {
+  index: number;
+  text: string;
+  engine: TranslationEngine;
+}
+
+export interface DictSense {
+  pos: string;
+  meaning: string;
+}
+
+export interface DictEntry {
+  word: string;
+  query: string;
+  inflection: string | null;
+  phonetic: string;
+  senses: DictSense[];
+  tags: string[];
+  collins: number;
+  oxford: boolean;
+  frequency: number | null;
+  forms: { kind: string; word: string }[];
+}
+
+export interface WordInsight {
+  word: string;
+  pos: string;
+  meaning: string;
+  collocations: string[];
+  examples: { en: string; zh: string }[];
+}
+
+export interface SentenceAnalysis {
+  translation: string;
+  structure: string;
+  points: { text: string; note: string }[];
+}
+
+export interface GlossaryTerm {
+  term: string;
+  translation: string;
+  created_at_ms: number;
+}
+
+export interface VocabEntry {
+  word: string;
+  phonetic: string;
+  meaning: string;
+  article_id: string | null;
+  article_title: string | null;
+  sentence_index: number | null;
+  sentence: string;
+  added_at_ms: number;
+}
+
+export type LlmState = 'not_downloaded' | 'downloading' | 'downloaded' | 'failed';
+
+export interface TranslatorStatus {
+  dictionary: boolean;
+  fast: boolean;
+  smart_enabled: boolean;
+  active: TranslationEngine | null;
+  llm: {
+    state: LlmState;
+    model_name: string;
+    downloaded_bytes: number;
+    total_bytes: number;
+    loaded: boolean;
+    error: string | null;
+  };
+}
+
 export type CoreEvent =
   | { type: 'library_changed' }
   | { type: 'synthesis_progress'; article_id: string; ready: number; total: number; sentence: SentenceSpan }
@@ -120,7 +197,26 @@ export type CoreEvent =
       buffered_ms: number;
       sentence: number | null;
       word: number | null;
-    };
+    }
+  | { type: 'translation_progress'; article_id: string; translation: SentenceTranslation; translated: number; total: number }
+  | { type: 'translations_changed'; article_id: string }
+  | {
+      type: 'word_insight_ready';
+      article_id: string;
+      sentence: number;
+      word: number;
+      insight: WordInsight | null;
+      error: string | null;
+    }
+  | {
+      type: 'sentence_analysis_ready';
+      article_id: string;
+      sentence: number;
+      analysis: SentenceAnalysis | null;
+      error: string | null;
+    }
+  | { type: 'translator_changed'; status: TranslatorStatus }
+  | { type: 'vocabulary_changed' };
 
 /** 宿主信息（`host_info`）：音量、变速能力等宿主侧能力。 */
 export interface HostInfo {

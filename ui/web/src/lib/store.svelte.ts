@@ -7,11 +7,18 @@ import type {
   CacheStats,
   Collection,
   CoreEvent,
+  DictEntry,
+  GlossaryTerm,
   HostInfo,
   PlayerState,
+  SentenceAnalysis,
   SentenceSpan,
+  SentenceTranslation,
   Timeline,
+  TranslatorStatus,
+  VocabEntry,
   Voice,
+  WordInsight,
   WordSpan,
 } from './types';
 
@@ -21,6 +28,7 @@ export type View =
   | { kind: 'list'; filter: ListFilter }
   | { kind: 'collection'; id: string }
   | { kind: 'search' }
+  | { kind: 'vocab' }
   | { kind: 'settings' };
 
 export type Theme = 'system' | 'light' | 'dark';
@@ -33,6 +41,8 @@ export interface Prefs {
   /** 非当前句亮度：50 / 60 / 70（%）。 */
   otherLevel: 50 | 60 | 70;
   showNotes: boolean;
+  /** 双语：每句下方显示中文译文。 */
+  bilingual: boolean;
   defaultVoice: string | null;
   defaultRate: number;
   volume: number;
@@ -44,6 +54,7 @@ const DEFAULT_PREFS: Prefs = {
   lineHeight: 1.6,
   otherLevel: 60,
   showNotes: true,
+  bilingual: false,
   defaultVoice: null,
   defaultRate: 1,
   volume: 1,
@@ -80,6 +91,13 @@ export interface Confirm {
   /** 带输入框（新建 / 重命名分类）：初始值与占位文字；确定时把输入内容交给 action。 */
   input?: { value: string; placeholder: string; validate?: (value: string) => string | null };
   action: (value: string) => void | Promise<unknown>;
+}
+
+/** 智能解析（点词举一反三 / 句子解析）的请求状态，按 文章:句[:词] 索引。 */
+export interface AiResult<T> {
+  loading: boolean;
+  value: T | null;
+  error: string | null;
 }
 
 const IDLE: PlayerState = {
@@ -137,6 +155,13 @@ class Store {
   scrubbing = $state<number | null>(null);
 
   timelines = $state<Record<string, Timeline>>({});
+  /** 每篇的译文：句下标 → 译文（智能精翻优先）。 */
+  translations = $state<Record<string, Record<number, SentenceTranslation>>>({});
+  translator = $state<TranslatorStatus | null>(null);
+  glossary = $state<GlossaryTerm[]>([]);
+  vocab = $state<VocabEntry[]>([]);
+  insights = $state<Record<string, AiResult<WordInsight>>>({});
+  analyses = $state<Record<string, AiResult<SentenceAnalysis>>>({});
   /** get_article 的正文与预计时长（搜索、未转换文章的“约”时长）。 */
   details = $state<Record<string, { body: string; estimated_ms: number }>>({});
 
@@ -173,6 +198,12 @@ class Store {
   /** 播放或缓冲中（播放按钮显示“暂停”）。 */
   active = $derived(this.player.status === 'playing' || this.player.status === 'buffering');
   dark = $derived(this.prefs.theme === 'system' ? this.systemDark : this.prefs.theme === 'dark');
+  /** 有整句翻译能力（Fast 或 Smart 任一可用）。 */
+  canTranslate = $derived(this.translator?.active != null);
+  /** 智能模式实际可用（已打开且模型已下载）。 */
+  smart = $derived(this.translator?.active === 'smart');
+  /** 生词本里的词（原形小写），点词面板据此显示“已收藏”。 */
+  vocabWords = $derived(new Set(this.vocab.map((v) => v.word)));
 
   /** 插值后的播放位置。 */
   position = $derived.by(() => {
@@ -215,14 +246,18 @@ class Store {
 
   async init() {
     onEvent((e) => this.handle(e));
-    const [articles, collections, voices, player, cache, host] = await Promise.all([
+    const [articles, collections, voices, player, cache, host, translator, vocab] = await Promise.all([
       invoke<ArticleSummary[]>('list_articles'),
       invoke<Collection[]>('list_collections'),
       invoke<Voice[]>('voices'),
       invoke<PlayerState>('player_state'),
       invoke<CacheStats>('cache_stats'),
       invoke<HostInfo>('host_info').catch(() => null),
+      invoke<TranslatorStatus>('translator_status').catch(() => null),
+      invoke<VocabEntry[]>('list_vocab').catch(() => []),
     ]);
+    this.translator = translator;
+    this.vocab = vocab;
     this.articles = articles;
     this.collections = collections;
     this.voices = voices;
@@ -306,6 +341,27 @@ class Store {
       case 'player_state_changed':
         this.applyPlayer(e.state);
         break;
+      case 'translation_progress': {
+        const m = this.translations[e.article_id];
+        if (m) m[e.translation.index] = e.translation;
+        break;
+      }
+      case 'translations_changed':
+        if (this.translations[e.article_id]) this.loadTranslations(e.article_id);
+        for (const k of Object.keys(this.analyses)) if (k.startsWith(`${e.article_id}:`)) delete this.analyses[k];
+        break;
+      case 'word_insight_ready':
+        this.insights[`${e.article_id}:${e.sentence}:${e.word}`] = { loading: false, value: e.insight, error: e.error };
+        break;
+      case 'sentence_analysis_ready':
+        this.analyses[`${e.article_id}:${e.sentence}`] = { loading: false, value: e.analysis, error: e.error };
+        break;
+      case 'translator_changed':
+        this.translator = e.status;
+        break;
+      case 'vocabulary_changed':
+        this.loadVocab();
+        break;
       case 'player_position': {
         // 记录事件实际到达间隔（EMA），供位置插值限制前探幅度，避免逐词高亮回跳
         const at = performance.now();
@@ -339,6 +395,7 @@ class Store {
       this.refreshLibrary();
       this.loopIndex = null;
       this.loadTimeline(state.article_id);
+      if (this.prefs.bilingual) this.loadTranslations(state.article_id);
     }
     if (state.status === 'ended' && prev.status !== 'ended') {
       // 单句循环在最后一句：回到句首；否则自动播待播清单中的下一篇
@@ -372,6 +429,133 @@ class Store {
       this.timelines[id] = await invoke<Timeline>('timeline', { id });
     } catch {
       /* 忽略 */
+    }
+  }
+
+  // ---------- 翻译与查词 ----------
+
+  async loadTranslations(id: string) {
+    try {
+      const list = await invoke<SentenceTranslation[]>('translations', { id });
+      const m: Record<number, SentenceTranslation> = {};
+      for (const t of list) m[t.index] = t;
+      this.translations[id] = m;
+    } catch {
+      /* 文章可能刚被删除 */
+    }
+  }
+
+  /** 打开 / 关闭双语；打开时让核心优先翻译正在播放的文章。 */
+  toggleBilingual() {
+    this.setPref('bilingual', !this.prefs.bilingual);
+    const id = this.player.article_id;
+    if (this.prefs.bilingual && id) {
+      invoke('prepare_translations', { id }).catch(() => {});
+      this.loadTranslations(id);
+    }
+  }
+
+  /** 打开智能翻译时若模型未下载，先确认下载（约 430MB）。 */
+  setSmart(on: boolean) {
+    const llm = this.translator?.llm;
+    if (on && llm && llm.state !== 'downloaded' && llm.state !== 'downloading') {
+      this.confirm = {
+        title: '下载智能翻译模型？',
+        body: `需要下载 ${llm.model_name}（约 ${fmtBytes(llm.total_bytes)}），下载后完全离线运行，会占用约 500 MB 内存。可随时在设置中删除。`,
+        ok: '下载并开启',
+        action: async () => {
+          await invoke('set_smart_translation', { enabled: true });
+          await invoke('download_llm');
+        },
+      };
+      return;
+    }
+    this.guard(async () => {
+      this.translator = await invoke<TranslatorStatus>('set_smart_translation', { enabled: on });
+      const id = this.player.article_id;
+      if (on && id) invoke('prepare_translations', { id }).catch(() => {});
+    });
+  }
+
+  downloadLlm() {
+    this.guard(() => invoke('download_llm'));
+  }
+
+  cancelLlmDownload() {
+    invoke('cancel_llm_download').catch(() => {});
+  }
+
+  deleteLlm() {
+    this.confirm = {
+      title: '删除智能翻译模型？',
+      body: '删除后智能翻译、举一反三和句子解析不可用，整句翻译退回极速模式。已生成的译文与解析会保留。',
+      ok: '删除',
+      danger: true,
+      action: async () => {
+        await invoke('set_smart_translation', { enabled: false });
+        await invoke('delete_llm');
+      },
+    };
+  }
+
+  async loadGlossary() {
+    this.glossary = await invoke<GlossaryTerm[]>('list_glossary').catch(() => []);
+  }
+
+  async addGlossary(term: string, translation: string): Promise<boolean> {
+    const ok = await this.guard(() => invoke('add_glossary_term', { term, translation }));
+    if (ok) await this.loadGlossary();
+    return ok;
+  }
+
+  async removeGlossary(term: string) {
+    await this.guard(() => invoke('remove_glossary_term', { term }));
+    await this.loadGlossary();
+  }
+
+  async loadVocab() {
+    this.vocab = await invoke<VocabEntry[]>('list_vocab').catch(() => this.vocab);
+  }
+
+  async addVocab(id: string, sentence: number, word: number) {
+    try {
+      const v = await invoke<VocabEntry>('add_vocab', { id, sentence, word });
+      this.flash(`已加入生词本：${v.word}`);
+    } catch (e) {
+      this.flash(String((e as Error).message ?? e));
+    }
+  }
+
+  async removeVocab(word: string) {
+    await this.guard(() => invoke('remove_vocab', { word }));
+  }
+
+  lookup(word: string): Promise<DictEntry | null> {
+    return invoke<DictEntry | null>('lookup_word', { word }).catch(() => null);
+  }
+
+  /** 点词“举一反三”：有缓存立即可见，否则后台生成，结果经事件写入 `insights`。 */
+  async requestInsight(id: string, sentence: number, word: number) {
+    const key = `${id}:${sentence}:${word}`;
+    if (this.insights[key]?.value || this.insights[key]?.loading) return;
+    this.insights[key] = { loading: true, value: null, error: null };
+    try {
+      const v = await invoke<WordInsight | null>('word_insight', { id, sentence, word });
+      if (v) this.insights[key] = { loading: false, value: v, error: null };
+    } catch (e) {
+      this.insights[key] = { loading: false, value: null, error: String((e as Error).message ?? e) };
+    }
+  }
+
+  async requestAnalysis(id: string, sentence: number) {
+    const key = `${id}:${sentence}`;
+    if (this.analyses[key]?.value || this.analyses[key]?.loading) return;
+    this.analyses[key] = { loading: true, value: null, error: null };
+    try {
+      const v = await invoke<SentenceAnalysis | null>('sentence_analysis', { id, sentence });
+      if (v) this.analyses[key] = { loading: false, value: v, error: null };
+    } catch (e) {
+      this.analyses[key] = { loading: false, value: null, error: String((e as Error).message ?? e) };
     }
   }
 

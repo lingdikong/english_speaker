@@ -1,8 +1,9 @@
 <script lang="ts">
   // 点词读音（UI_SPEC §4.5 / §5）：词旁 popover。词组（‿ violet）+ IPA + 发音；类型 chip + 美式/英式；中文说明；“同类”示例；
   // “从这里播放” / “0.75× 慢放这句”。
+  // 翻译与查词：离线词典释义（变形还原、考纲标签）、收藏到生词本；智能模式下“举一反三”（语境义 / 搭配 / 例句）。
   import { store } from '../lib/store.svelte';
-  import type { Link, WordSpan } from '../lib/types';
+  import type { DictEntry, Link, WordSpan } from '../lib/types';
   import Icon from './Icon.svelte';
 
   const LINKS: Record<Link, { name: string; desc: (a: string, b: string) => string; same: string[][] }> = {
@@ -81,11 +82,36 @@
     return { type: null, ipa: n?.ipa ?? '', desc: n?.ipa ? '' : '该词暂无读音标注。', same: null };
   });
 
+  // 查词：每次打开（换词）时查一次，毫秒级
+  let dict = $state<DictEntry | null>(null);
+  let lookedUp = $state('');
+  $effect(() => {
+    const word = w ? clean(w.text) : '';
+    if (!word || word === lookedUp) return;
+    lookedUp = word;
+    dict = null;
+    store.lookup(word).then((d) => {
+      if (lookedUp === word) dict = d;
+    });
+  });
+  const vocabKey = $derived((dict?.word ?? (w ? clean(w.text) : '')).toLowerCase());
+  const saved = $derived(store.vocabWords.has(vocabKey));
+  const aid = $derived(store.player.article_id);
+  const insight = $derived(p && s && aid ? store.insights[`${aid}:${s.index}:${p.wordIndex}`] : undefined);
+
+  function toggleVocab() {
+    if (!p || !s || !aid) return;
+    if (saved) store.removeVocab(vocabKey);
+    else store.addVocab(aid, s.index, p.wordIndex);
+  }
+
   let el = $state<HTMLDivElement>();
   let pos = $state({ x: -9999, y: 0 });
   $effect(() => {
     if (!p || !el) return;
     void info;
+    void dict;
+    void insight;
     const r = el.getBoundingClientRect();
     const gap = 10;
     const b = p.box ?? p.rect;
@@ -121,17 +147,63 @@
         </div>
         {#if info.ipa}<div class="ipa">/{info.ipa}/</div>{/if}
       </div>
-      <button
-        class="icon-btn fill"
-        aria-label="播放这个词"
-        onclick={() => store.playSpan(w.start_ms, (next ?? w).end_ms)}><Icon name="vol" size={20} stroke={1.9} /></button
-      >
+      <div class="row" style="gap:8px">
+        {#if store.translator?.dictionary}
+          <button
+            class="icon-btn fill"
+            class:saved
+            aria-label={saved ? '从生词本移除' : '加入生词本'}
+            aria-pressed={saved}
+            onclick={toggleVocab}><Icon name="star" size={19} stroke={1.9} /></button
+          >
+        {/if}
+        <button
+          class="icon-btn fill"
+          aria-label="播放这个词"
+          onclick={() => store.playSpan(w.start_ms, (next ?? w).end_ms)}><Icon name="vol" size={20} stroke={1.9} /></button
+        >
+      </div>
     </div>
     <div class="row" style="gap:8px">
       {#if info.type}<span class="chip violet">{info.type}</span>{/if}
       <span class="chip muted">{british ? '英式发音' : '美式发音'}</span>
     </div>
     {#if info.desc}<div class="desc">{info.desc}</div>{/if}
+    {#if dict && dict.senses.length}
+      <div class="dict">
+        {#if dict.inflection}
+          <div class="infl"><b>{dict.query}</b> 是 <b>{dict.word}</b> 的{dict.inflection}</div>
+        {/if}
+        {#each dict.senses.slice(0, 3) as sense}
+          <div class="sense">{#if sense.pos}<span class="pos">{sense.pos}</span>{/if}<span>{sense.meaning}</span></div>
+        {/each}
+        {#if dict.tags.length}
+          <div class="row tags">{#each dict.tags as tag}<span class="tag">{tag}</span>{/each}</div>
+        {/if}
+      </div>
+    {/if}
+    {#if store.smart}
+      {#if insight?.value}
+        {@const v = insight.value}
+        <div class="insight">
+          <div class="row" style="gap:8px"><span class="chip violet">语境义</span>{#if v.pos}<span class="pos">{v.pos}</span>{/if}<b>{v.meaning}</b></div>
+          {#if v.collocations.length}
+            <div class="row coll">{#each v.collocations as c}<span class="tx">{c}</span>{/each}</div>
+          {/if}
+          {#each v.examples as ex}
+            <div class="ex"><div class="tx">{ex.en}</div><div>{ex.zh}</div></div>
+          {/each}
+        </div>
+      {:else if insight?.loading}
+        <div class="insight muted">正在结合这句话分析…</div>
+      {:else}
+        <button
+          class="chip violet more"
+          onclick={() => aid && s && p && store.requestInsight(aid, s.index, p.wordIndex)}
+          ><Icon name="sparkle" size={14} stroke={2} />举一反三{#if insight?.error}（重试）{/if}</button
+        >
+      {/if}
+    {/if}
     {#if info.same}
       <div class="same">
         同类：{#each info.same as [x, y], i}{#if i}&nbsp;·&nbsp;{/if}<span class="tx" style="color:var(--t1)">{x}<span class="lk">‿</span>{y}</span>{/each}
@@ -207,6 +279,81 @@
     justify-content: center;
     font-weight: 700;
     font-size: 14px;
+  }
+  .wpop {
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .icon-btn.saved {
+    color: var(--accent);
+  }
+  .icon-btn.saved :global(svg) {
+    fill: currentColor;
+  }
+  .dict,
+  .insight {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--t1);
+  }
+  .infl {
+    color: var(--t2);
+    font-size: 13px;
+  }
+  .sense {
+    display: flex;
+    gap: 8px;
+  }
+  .pos {
+    flex-shrink: 0;
+    color: var(--t2);
+    font-style: italic;
+    font-size: 13px;
+  }
+  .tags {
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+  .tag {
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 20px;
+    color: var(--t2);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .insight {
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: var(--card);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .insight.muted {
+    color: var(--t2);
+  }
+  .coll {
+    gap: 6px 12px;
+    flex-wrap: wrap;
+    color: var(--violet-text);
+    font-weight: 700;
+  }
+  .ex {
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--t2);
+  }
+  .ex .tx {
+    color: var(--t1);
+  }
+  .more {
+    align-self: flex-start;
+    cursor: pointer;
   }
   .chip.btn:disabled {
     opacity: 0.5;

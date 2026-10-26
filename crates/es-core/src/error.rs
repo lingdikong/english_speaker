@@ -16,6 +16,12 @@ pub enum CoreError {
     Audio(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("translation error: {0}")]
+    Translation(String),
+    #[error("network error: {0}")]
+    Network(String),
+    #[error("cancelled")]
+    Cancelled,
     #[error("internal error: {0}")]
     Internal(String),
 }

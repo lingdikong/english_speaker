@@ -1,7 +1,7 @@
 import SpeakerCore
 import SwiftUI
 
-/// 设置 Tab（UI_SPEC §4.7）：外观 / 阅读 / 朗读 / 本地缓存 / 关于。
+/// 设置 Tab（UI_SPEC §4.7）：外观 / 阅读 / 翻译 / 朗读 / 本地缓存 / 关于。
 struct SettingsView: View {
     @Environment(Store.self) private var store
     @Environment(Prefs.self) private var prefs
@@ -22,6 +22,9 @@ struct SettingsView: View {
                         LineHeightSegmented()
                         ReadingToggles()
                     }
+                }
+                if store.translator != nil {
+                    section("翻译") { TranslationSettings() }
                 }
                 section("朗读") {
                     GroupCard {
@@ -154,10 +157,11 @@ struct SettingsView: View {
         return GroupCard {
             GroupRow(title: "版本") { value("\(version) (\(build))") }
             GroupRow(title: "语音模型") { value(store.usingRealModel ? "Kokoro-82M v1.0 int8" : "Mock（未找到模型）") }
+            GroupRow(title: "翻译模型") { value("Opus-MT en-zh int8 · ECDICT") }
             GroupRow(title: "隐私") { value("完全离线，文章不会上传") }
             VStack(alignment: .leading, spacing: 6) {
                 Text("开源许可").font(Fonts.ui(15, .semibold))
-                Text("Kokoro-82M 模型 Apache-2.0 · ONNX Runtime MIT · misaki 词典 Apache-2.0 · Space Grotesk / Manrope / Noto Sans 字体 SIL OFL 1.1")
+                Text("Kokoro-82M 模型 Apache-2.0 · ONNX Runtime MIT · misaki 词典 Apache-2.0 · Opus-MT Apache-2.0 · ECDICT MIT · Qwen2.5 Apache-2.0 · llama.cpp MIT · Space Grotesk / Manrope / Noto Sans 字体 SIL OFL 1.1")
                     .font(Fonts.ui(12, .medium)).foregroundStyle(p.t2).lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }

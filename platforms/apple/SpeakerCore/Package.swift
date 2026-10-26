@@ -13,8 +13,12 @@ let package = Package(
         .target(
             name: "SpeakerCore",
             dependencies: ["SpeakerCoreFFI"],
-            // 静态链接的 ONNX Runtime 依赖
-            linkerSettings: [.linkedFramework("CoreML"), .linkedFramework("Foundation"), .linkedLibrary("c++")]
+            // 静态链接的 ONNX Runtime（CoreML）与 llama.cpp（Metal / Accelerate）的系统依赖
+            linkerSettings: [
+                .linkedFramework("CoreML"), .linkedFramework("Foundation"),
+                .linkedFramework("Metal"), .linkedFramework("MetalKit"), .linkedFramework("Accelerate"),
+                .linkedLibrary("c++"),
+            ]
         ),
         .testTarget(name: "SpeakerCoreTests", dependencies: ["SpeakerCore"]),
     ]

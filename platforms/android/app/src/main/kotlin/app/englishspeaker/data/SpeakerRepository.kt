@@ -8,6 +8,14 @@ import app.englishspeaker.core.Accent
 import app.englishspeaker.core.ArticleCollection
 import app.englishspeaker.core.ArticleSummary
 import app.englishspeaker.core.CacheStats
+import app.englishspeaker.core.DictEntry
+import app.englishspeaker.core.GlossaryTerm
+import app.englishspeaker.core.SentenceAnalysis
+import app.englishspeaker.core.SentenceTranslation
+import app.englishspeaker.core.TranslationEngine
+import app.englishspeaker.core.TranslatorStatus
+import app.englishspeaker.core.VocabEntry
+import app.englishspeaker.core.WordInsight
 import app.englishspeaker.core.PlayerState
 import app.englishspeaker.core.PlayerStatus
 import app.englishspeaker.core.SourceKind
@@ -33,6 +41,9 @@ data class Position(
     val word: Int? = null,
     val atMs: Long = 0,
 )
+
+/** 智能解析（举一反三 / 句子解析）的请求状态。 */
+data class AiResult<T>(val loading: Boolean = false, val value: T? = null, val error: String? = null)
 
 /**
  * 唯一的数据源：持有 [SpeakerCore]，把核心事件切回主线程转成 StateFlow。
@@ -75,6 +86,24 @@ class SpeakerRepository(private val context: Context) {
     /** 单句循环：被循环的句子下标（客户端实现）。 */
     private val _loopSentence = MutableStateFlow<Int?>(null)
     val loopSentence: StateFlow<Int?> = _loopSentence
+    // —— 翻译与查词 ——
+    private val _translator = MutableStateFlow<TranslatorStatus?>(null)
+    val translator: StateFlow<TranslatorStatus?> = _translator
+    /** 当前文章的译文：句下标 → 译文（智能精翻优先）。 */
+    private val _translations = MutableStateFlow<Map<Int, SentenceTranslation>>(emptyMap())
+    val translations: StateFlow<Map<Int, SentenceTranslation>> = _translations
+    private val _bilingual = MutableStateFlow(prefs.getBoolean("bilingual", false))
+    val bilingual: StateFlow<Boolean> = _bilingual
+    private val _vocab = MutableStateFlow<List<VocabEntry>>(emptyList())
+    val vocab: StateFlow<List<VocabEntry>> = _vocab
+    private val _glossary = MutableStateFlow<List<GlossaryTerm>>(emptyList())
+    val glossary: StateFlow<List<GlossaryTerm>> = _glossary
+    /** 当前文章的举一反三（键 "句:词"）与句子解析（键为句下标）。 */
+    private val _insights = MutableStateFlow<Map<String, AiResult<WordInsight>>>(emptyMap())
+    val insights: StateFlow<Map<String, AiResult<WordInsight>>> = _insights
+    private val _analyses = MutableStateFlow<Map<Int, AiResult<SentenceAnalysis>>>(emptyMap())
+    val analyses: StateFlow<Map<Int, AiResult<SentenceAnalysis>>> = _analyses
+
     /** 搜索用的正文缓存。 */
     private val bodies = HashMap<String, String>()
 
@@ -101,6 +130,8 @@ class SpeakerRepository(private val context: Context) {
             core = created
             withContext(Dispatchers.IO) { seedIfNeeded(created) }
             _voices.value = created.voices()
+            _translator.value = runCatching { created.translatorStatus() }.getOrNull()
+            _vocab.value = runCatching { created.listVocab() }.getOrNull().orEmpty()
             refreshCache()
             Log.i(TAG, "core ready, voices=${_voices.value.size}")
             refreshArticles()
@@ -162,6 +193,21 @@ class SpeakerRepository(private val context: Context) {
                     runCatching { core?.seekSentence(loop.toUInt()) }
                 }
             }
+            is SpeakerEvent.TranslationProgress -> if (e.articleId == _player.value.articleId) {
+                _translations.value = _translations.value + (e.translation.index.toInt() to e.translation)
+            }
+            is SpeakerEvent.TranslationsChanged -> if (e.articleId == _player.value.articleId) {
+                _analyses.value = emptyMap()
+                loadTranslations(e.articleId)
+            }
+            is SpeakerEvent.WordInsightReady -> if (e.articleId == _player.value.articleId) {
+                _insights.value = _insights.value + ("${e.sentence}:${e.word}" to AiResult(value = e.insight, error = e.error))
+            }
+            is SpeakerEvent.SentenceAnalysisReady -> if (e.articleId == _player.value.articleId) {
+                _analyses.value = _analyses.value + (e.sentence.toInt() to AiResult(value = e.analysis, error = e.error))
+            }
+            is SpeakerEvent.TranslatorChanged -> _translator.value = e.status
+            SpeakerEvent.VocabularyChanged -> refreshVocab()
         }
     }
 
@@ -173,7 +219,13 @@ class SpeakerRepository(private val context: Context) {
             atMs = SystemClock.elapsedRealtime(),
         )
         val id = s.articleId
-        if (id != null && id != prev.articleId) loadTimeline(id)
+        if (id != null && id != prev.articleId) {
+            loadTimeline(id)
+            _insights.value = emptyMap()
+            _analyses.value = emptyMap()
+            _translations.value = emptyMap()
+            loadTranslations(id)
+        }
         if (id == null) _timeline.value = null
         if (id != prev.articleId) _loopSentence.value = null
         // 单句循环最后一句：播完后回到该句
@@ -220,6 +272,107 @@ class SpeakerRepository(private val context: Context) {
             if (_player.value.articleId == id || _timeline.value == null) _timeline.value = t
         }
     }
+
+    // —— 翻译与查词 ——
+
+    /** 智能模式实际可用（已打开且模型已下载）。 */
+    val smartReady: Boolean get() = _translator.value?.active == TranslationEngine.SMART
+
+    private fun loadTranslations(id: String) {
+        val c = core ?: return
+        if (!_bilingual.value) return
+        scope.launch {
+            val list = withContext(Dispatchers.IO) { runCatching { c.translations(id) }.getOrNull() } ?: return@launch
+            if (_player.value.articleId == id) _translations.value = list.associateBy { it.index.toInt() }
+        }
+    }
+
+    /** 打开双语：让核心优先翻译正在播放的文章。 */
+    fun setBilingual(on: Boolean) {
+        _bilingual.value = on
+        prefs.edit().putBoolean("bilingual", on).apply()
+        if (on) prepareTranslations()
+    }
+
+    private fun prepareTranslations() {
+        val id = _player.value.articleId ?: return
+        runCatching { core?.prepareTranslations(id) }
+        loadTranslations(id)
+    }
+
+    fun lookup(word: String): DictEntry? = runCatching { core?.lookupWord(word) }.getOrNull()
+
+    fun requestInsight(sentence: Int, word: Int) {
+        val c = core ?: return
+        val id = _player.value.articleId ?: return
+        val key = "$sentence:$word"
+        val cur = _insights.value[key]
+        if (cur?.value != null || cur?.loading == true) return
+        val r = runCatching { c.wordInsight(id, sentence.toUInt(), word.toUInt()) }
+        _insights.value = _insights.value + (key to r.fold(
+            { v -> if (v != null) AiResult(value = v) else AiResult(loading = true) },
+            { e -> AiResult(error = e.message) },
+        ))
+    }
+
+    fun requestAnalysis(sentence: Int) {
+        val c = core ?: return
+        val id = _player.value.articleId ?: return
+        val cur = _analyses.value[sentence]
+        if (cur?.value != null || cur?.loading == true) return
+        val r = runCatching { c.sentenceAnalysis(id, sentence.toUInt()) }
+        _analyses.value = _analyses.value + (sentence to r.fold(
+            { v -> if (v != null) AiResult(value = v) else AiResult(loading = true) },
+            { e -> AiResult(error = e.message) },
+        ))
+    }
+
+    fun setSmart(on: Boolean) {
+        runCatching { core?.setSmartTranslation(on) }
+        _translator.value = runCatching { core?.translatorStatus() }.getOrNull()
+        if (on) prepareTranslations()
+    }
+
+    fun downloadLlm() {
+        runCatching { core?.downloadLlm() }.onFailure { Log.w(TAG, "downloadLlm", it) }
+        _translator.value = runCatching { core?.translatorStatus() }.getOrNull()
+    }
+
+    fun cancelLlmDownload() { core?.cancelLlmDownload() }
+
+    fun deleteLlm() {
+        runCatching { core?.setSmartTranslation(false); core?.deleteLlm() }
+        _translator.value = runCatching { core?.translatorStatus() }.getOrNull()
+    }
+
+    fun refreshGlossary() {
+        _glossary.value = runCatching { core?.listGlossary() }.getOrNull() ?: _glossary.value
+    }
+
+    /** 失败（如为空）时返回 false。 */
+    fun addGlossary(term: String, translation: String): Boolean {
+        val ok = runCatching { core?.addGlossaryTerm(term, translation) }.isSuccess
+        refreshGlossary()
+        return ok
+    }
+
+    fun removeGlossary(term: String) {
+        runCatching { core?.removeGlossaryTerm(term) }
+        refreshGlossary()
+    }
+
+    private fun refreshVocab() {
+        _vocab.value = runCatching { core?.listVocab() }.getOrNull() ?: _vocab.value
+    }
+
+    fun isInVocab(word: String): Boolean = _vocab.value.any { it.word == word.lowercase() }
+
+    fun addVocab(sentence: Int, word: Int) {
+        val id = _player.value.articleId ?: return
+        runCatching { core?.addVocab(id, sentence.toUInt(), word.toUInt()) }.onFailure { Log.w(TAG, "addVocab", it) }
+    }
+
+    fun removeVocab(word: String) { runCatching { core?.removeVocab(word) } }
 
     // —— 资料库 ——
 

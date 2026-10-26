@@ -44,6 +44,14 @@ import app.englishspeaker.ui.theme.Palette
 import app.englishspeaker.ui.theme.Type
 import app.englishspeaker.ui.theme.Ui
 import kotlinx.coroutines.flow.first
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.remember
+import app.englishspeaker.ui.translate.DictionarySection
+import app.englishspeaker.ui.translate.InsightSection
+import app.englishspeaker.ui.translate.VocabStar
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -136,6 +144,9 @@ fun WordSheet(vm: AppViewModel, target: WordTarget, onDismiss: () -> Unit) {
     val article = repo.article(repo.player.value.articleId)
     val accent = repo.voice(article?.voiceId)?.accent
     val hasTimes = s.ready && first.endMs > first.startMs
+    val translator by repo.translator.collectAsState()
+    val dict = remember(target) { repo.lookup(w.text) }
+    val smart = translator?.active == app.englishspeaker.core.TranslationEngine.SMART
 
     fun playRange(from: WordSpan, to: WordSpan) {
         scope.launch {
@@ -149,7 +160,8 @@ fun WordSheet(vm: AppViewModel, target: WordTarget, onDismiss: () -> Unit) {
 
     AppSheet(onDismiss) { close ->
         Column(
-            Modifier.padding(start = 22.dp, end = 22.dp, top = 18.dp, bottom = 28.dp).navigationBarsPadding(),
+            Modifier.verticalScroll(rememberScrollState())
+                .padding(start = 22.dp, end = 22.dp, top = 18.dp, bottom = 28.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             Row(verticalAlignment = Alignment.Top) {
@@ -160,6 +172,10 @@ fun WordSheet(vm: AppViewModel, target: WordTarget, onDismiss: () -> Unit) {
                     )
                     if (ipa.isNotEmpty()) Text("/$ipa/", style = Type.ipa, color = p.violetText, modifier = Modifier.padding(top = 4.dp))
                 }
+                if (translator?.dictionary == true) {
+                    VocabStar(repo, (dict?.word ?: a), target.sentence, target.word)
+                    Spacer(Modifier.width(8.dp))
+                }
                 IconBtn(Icons.line("vol", 1.9f), "播放这个词", fill = true, iconSize = 20.dp, enabled = hasTimes) {
                     playRange(first, second ?: first)
                 }
@@ -169,6 +185,8 @@ fun WordSheet(vm: AppViewModel, target: WordTarget, onDismiss: () -> Unit) {
                 Chip(if (accent == Accent.BRITISH) "英式发音" else "美式发音", ChipKind.Muted)
             }
             Text(explain(kind, a, b, ipa, w.weakForm, p), style = Type.bodyMedium, color = p.t2)
+            if (dict != null && dict.senses.isNotEmpty()) DictionarySection(dict)
+            if (smart) InsightSection(repo, target.sentence, target.word)
             if (kind.examples.isNotEmpty()) {
                 val ex = buildAnnotatedString {
                     append("同类：")

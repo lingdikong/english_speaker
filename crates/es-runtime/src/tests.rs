@@ -361,3 +361,148 @@ fn connected_speech_notes_in_timeline() {
     assert!(!s.words[0].notes.ipa.is_empty());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ---------- 翻译与查词 ----------
+
+fn translation_harness(dir: &std::path::Path) -> (Harness, Arc<es_core::testing::MockLlm>) {
+    use es_core::testing::{MockDictionary, MockLlm, MockTranslator};
+    let events = Arc::new(CollectingListener::default());
+    let llm = Arc::new(MockLlm::default());
+    let deps = TranslationDeps {
+        translator: Some(Arc::new(MockTranslator::default())),
+        dictionary: Some(Arc::new(MockDictionary)),
+        llm: Some(llm.clone()),
+    };
+    let app = build_with_engines(
+        RuntimeConfig::new(dir.to_path_buf()),
+        Arc::new(MockTtsEngine::default()),
+        deps,
+        Arc::new(NullSink::default()),
+        events.clone(),
+    )
+    .unwrap();
+    (Harness { app, events }, llm)
+}
+
+fn translated(app: &AppCore, id: &str) -> Vec<String> {
+    app.translations(id)
+        .unwrap()
+        .into_iter()
+        .map(|t| t.text)
+        .collect()
+}
+
+/// 导入即后台预翻（Fast）；术语表变化后含该术语的句子重翻并使用固定译法。
+#[test]
+fn translates_in_background_and_applies_glossary() {
+    use es_core::model::TranslationEngine;
+    let dir = temp_dir("translate-fast");
+    let (h, _) = translation_harness(&dir);
+    let id = import(&h.app, "The app works. Open the app now.");
+    wait_for("fast translations", || translated(&h.app, &id).len() == 2);
+    assert_eq!(
+        translated(&h.app, &id),
+        ["〔The〕〔app〕〔works〕", "〔Open〕〔the〕〔app〕〔now〕"]
+    );
+    let status = h.app.translator_status();
+    assert_eq!(status.active, Some(TranslationEngine::Fast));
+    assert!(status.dictionary && status.fast && !status.smart_enabled);
+
+    h.app.add_glossary_term("App", "应用").unwrap();
+    wait_for("glossary retranslation", || {
+        let t = translated(&h.app, &id);
+        t.len() == 2 && t.iter().all(|t| t.contains("应用"))
+    });
+    assert_eq!(translated(&h.app, &id)[0], "〔The〕应用〔works〕");
+    assert!(h
+        .events
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|e| matches!(e, CoreEvent::TranslationsChanged { article_id } if *article_id == id)));
+    assert_eq!(h.app.list_glossary().unwrap().len(), 1);
+
+    // 查词：去标点、还原原形
+    let e = h.app.lookup_word("“Apps,").unwrap().unwrap();
+    assert_eq!(
+        (e.word.as_str(), e.inflection.as_deref()),
+        ("app", Some("复数"))
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 智能模式：未下载时退回 Fast；下载后精翻正在看的文章，点词 / 句子解析经事件送达并缓存；
+/// 关闭后释放模型。生词本按原形去重，文章删除后保留。
+#[test]
+fn smart_mode_lifecycle_and_vocabulary() {
+    use es_core::model::{LlmState, TranslationEngine};
+    use es_core::ports::LlmProvider;
+    let dir = temp_dir("translate-smart");
+    let (h, llm) = translation_harness(&dir);
+    let id = import(&h.app, "Cats sleep. Dogs run.");
+    wait_for("synthesized", || h.app.timeline(&id).unwrap().complete);
+
+    h.app.set_smart_translation(true).unwrap();
+    let status = h.app.translator_status();
+    assert!(status.smart_enabled);
+    assert_eq!(
+        status.active,
+        Some(TranslationEngine::Fast),
+        "未下载时退回 Fast"
+    );
+    assert!(h.app.word_insight(&id, 0, 0).is_err());
+
+    h.app.prepare_translations(&id).unwrap();
+    h.app.download_llm().unwrap();
+    wait_for("download", || llm.is_downloaded());
+    wait_for("smart translations", || {
+        let t = h.app.translations(&id).unwrap();
+        t.len() == 2 && t.iter().all(|t| t.engine == TranslationEngine::Smart)
+    });
+    assert_eq!(translated(&h.app, &id)[0], "精译：Cats sleep.");
+    let status = h.app.translator_status();
+    assert_eq!(status.active, Some(TranslationEngine::Smart));
+    assert_eq!(status.llm.state, LlmState::Downloaded);
+    assert!(status.llm.loaded);
+
+    assert!(
+        h.app.word_insight(&id, 0, 0).unwrap().is_none(),
+        "首次在后台生成"
+    );
+    wait_for("word insight", || {
+        h.events.events.lock().unwrap().iter().any(|e| {
+            matches!(e,
+            CoreEvent::WordInsightReady { insight: Some(w), .. } if w.meaning == "语境义Cats")
+        })
+    });
+    let cached = h.app.word_insight(&id, 0, 0).unwrap().unwrap();
+    assert_eq!(cached.collocations, ["Cats up", "Cats out"]);
+    assert!(h.app.sentence_analysis(&id, 1).unwrap().is_none());
+    wait_for("sentence analysis", || {
+        h.app.sentence_analysis(&id, 1).unwrap().is_some()
+    });
+
+    h.app.set_smart_translation(false).unwrap();
+    let status = h.app.translator_status();
+    assert!(!status.llm.loaded && status.active == Some(TranslationEngine::Fast));
+    // 已有的精翻仍然展示
+    assert_eq!(translated(&h.app, &id)[1], "精译：Dogs run.");
+
+    let v = h.app.add_vocab(&id, 0, 0).unwrap();
+    assert_eq!((v.word.as_str(), v.meaning.as_str()), ("cat", "n. 释义cat"));
+    h.app.add_vocab(&id, 0, 0).unwrap();
+    assert_eq!(h.app.list_vocab().unwrap().len(), 1);
+    h.app.delete_article(&id).unwrap();
+    let vocab = h.app.list_vocab().unwrap();
+    assert_eq!(
+        (vocab[0].article_id.as_deref(), vocab[0].sentence.as_str()),
+        (None, "Cats sleep.")
+    );
+    h.app.remove_vocab("Cats").unwrap();
+    assert!(h.app.list_vocab().unwrap().is_empty());
+
+    h.app.delete_llm().unwrap();
+    assert_eq!(h.app.translator_status().llm.state, LlmState::NotDownloaded);
+    let _ = std::fs::remove_dir_all(&dir);
+}

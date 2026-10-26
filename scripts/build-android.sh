@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 构建 Android 各 ABI 的 .so，生成 Kotlin 绑定。
 # 产物：platforms/android/core/src/main/{jniLibs,kotlin}
-# 依赖：ANDROID_NDK_HOME（默认取 $ANDROID_HOME/ndk 下最新版本）
+# 依赖：ANDROID_NDK_HOME（默认取 $ANDROID_HOME/ndk 下最新版本）；cmake（编译 llama.cpp）
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/platforms/android/core/src/main"
@@ -21,17 +21,20 @@ ABIS=(
 )
 
 cd "$ROOT"
+# llama.cpp（智能翻译）用 cmake + NDK 工具链编译，C++ 运行时与 ONNX Runtime 一样用 c++_shared
+export ANDROID_NDK="$NDK" ANDROID_API_LEVEL="$API"
 for entry in "${ABIS[@]}"; do
   IFS=: read -r target abi clang <<<"$entry"
   rustup target add "$target" >/dev/null
   env_target="$(echo "$target" | tr '[:lower:]-' '[:upper:]_')"
   export "CC_${target//-/_}=$BIN/${clang}${API}-clang"
+  export "CXX_${target//-/_}=$BIN/${clang}${API}-clang++"
   export "AR_${target//-/_}=$BIN/llvm-ar"
   export "CARGO_TARGET_${env_target}_LINKER=$BIN/${clang}${API}-clang"
   cargo build -p es-ffi --profile "$PROFILE" --target "$target"
   mkdir -p "$OUT/jniLibs/$abi"
   cp "target/$target/$PROFILE_DIR/libes_ffi.so" "$OUT/jniLibs/$abi/"
-  # ONNX Runtime 依赖 NDK 的共享 C++ 运行时，需随 APK 分发
+  # ONNX Runtime 与 llama.cpp 依赖 NDK 的共享 C++ 运行时，需随 APK 分发
   cp "$BIN/../sysroot/usr/lib/$target/libc++_shared.so" "$OUT/jniLibs/$abi/"
 done
 

@@ -311,6 +311,198 @@ impl Default for PlayerState {
     }
 }
 
+// ---------- 翻译与查词 ----------
+
+/// 整句翻译用的引擎。设置里打开“智能翻译”后优先用 Smart，否则用 Fast。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TranslationEngine {
+    /// 机器翻译底座（Opus-MT，ONNX）：随包内置，整句毫秒级输出。
+    Fast,
+    /// 本地大模型（Qwen，llama.cpp）：结合上下文与术语表，按需下载。
+    Smart,
+}
+
+impl TranslationEngine {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Fast => "fast",
+            Self::Smart => "smart",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "fast" => Self::Fast,
+            "smart" => Self::Smart,
+            _ => return None,
+        })
+    }
+}
+
+/// 一句的中文译文。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SentenceTranslation {
+    pub index: u32,
+    pub text: String,
+    pub engine: TranslationEngine,
+}
+
+/// 词典中的一条释义：词性 + 中文释义。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DictSense {
+    /// `n.` `vt.` `adj.` 等；词典未标注时为空。
+    pub pos: String,
+    pub meaning: String,
+}
+
+/// 词形变化（过去式、复数等）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WordForm {
+    /// 中文名称：过去式 / 过去分词 / 现在分词 / 第三人称单数 / 复数 / 比较级 / 最高级。
+    pub kind: String,
+    pub word: String,
+}
+
+/// 离线词典的查词结果（ECDICT）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DictEntry {
+    /// 词条（原形）。
+    pub word: String,
+    /// 用户点的词（可能是变形，如 perceived）。
+    pub query: String,
+    /// `query` 是 `word` 的哪种变形（如“过去式”）；就是原形时为空。
+    pub inflection: Option<String>,
+    /// 音标（IPA，不含斜杠）；词典没有时为空。
+    pub phonetic: String,
+    pub senses: Vec<DictSense>,
+    /// 考试大纲标签：中考 / 高考 / 四级 / 六级 / 考研 / 托福 / 雅思 / GRE。
+    pub tags: Vec<String>,
+    /// 柯林斯星级 0–5。
+    pub collins: u8,
+    /// 是否牛津 3000 核心词。
+    pub oxford: bool,
+    /// 当代语料库词频排名（越小越常用）；没有时为空。
+    pub frequency: Option<u32>,
+    pub forms: Vec<WordForm>,
+}
+
+impl DictEntry {
+    /// 一行的简明释义（生词本、术语提示用）。
+    pub fn brief(&self) -> String {
+        self.senses
+            .iter()
+            .take(2)
+            .map(|s| {
+                if s.pos.is_empty() {
+                    s.meaning.clone()
+                } else {
+                    format!("{} {}", s.pos, s.meaning)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("；")
+    }
+}
+
+/// 例句（英文 + 中文）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExampleSentence {
+    pub en: String,
+    pub zh: String,
+}
+
+/// 点词“举一反三”（智能模式）：结合所在句子的语境分析一个词。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WordInsight {
+    pub word: String,
+    /// 在这句里的词性。
+    pub pos: String,
+    /// 在这句里的意思（语境义）。
+    pub meaning: String,
+    /// 常用搭配。
+    pub collocations: Vec<String>,
+    /// 地道例句。
+    pub examples: Vec<ExampleSentence>,
+}
+
+/// 句子里值得讲解的一处：短语 / 语法点 + 说明。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GrammarPoint {
+    pub text: String,
+    pub note: String,
+}
+
+/// 句子解析（智能模式）：意译、句子结构、难点。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SentenceAnalysis {
+    pub translation: String,
+    pub structure: String,
+    pub points: Vec<GrammarPoint>,
+}
+
+/// 用户术语表中的一条：英文术语 → 固定译法。整句翻译时强制使用。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GlossaryTerm {
+    pub term: String,
+    pub translation: String,
+    pub created_at_ms: i64,
+}
+
+/// 生词本中的一个词。同一个词（按原形，不区分大小写）只收一次，再次收藏时更新出处。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VocabEntry {
+    /// 原形小写，兼作主键。
+    pub word: String,
+    pub phonetic: String,
+    /// 简明释义（收藏时从词典取，可为空）。
+    pub meaning: String,
+    /// 出处：文章被删除后为空，生词本仍保留这个词与例句。
+    pub article_id: Option<ArticleId>,
+    pub article_title: Option<String>,
+    pub sentence_index: Option<u32>,
+    /// 出处句子原文（例句）。
+    pub sentence: String,
+    pub added_at_ms: i64,
+}
+
+/// 智能翻译模型（Qwen）在本机的状态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LlmState {
+    NotDownloaded,
+    Downloading,
+    /// 已下载（不一定已加载进内存）。
+    Downloaded,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmStatus {
+    pub state: LlmState,
+    /// 模型名，如 `Qwen2.5-0.5B-Instruct Q4_0`。
+    pub model_name: String,
+    pub downloaded_bytes: u64,
+    pub total_bytes: u64,
+    /// 已加载进内存（约 500MB）；关闭智能翻译后释放。
+    pub loaded: bool,
+    pub error: Option<String>,
+}
+
+/// 翻译与查词能力的总览，设置页据此展示。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TranslatorStatus {
+    /// 离线词典可用。
+    pub dictionary: bool,
+    /// 机器翻译底座可用。
+    pub fast: bool,
+    /// 用户是否打开了“智能翻译”（模型未下载时仍可为真，此时实际退回 Fast）。
+    pub smart_enabled: bool,
+    /// 整句翻译实际使用的引擎；两者都不可用时为空。
+    pub active: Option<TranslationEngine>,
+    pub llm: LlmStatus,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

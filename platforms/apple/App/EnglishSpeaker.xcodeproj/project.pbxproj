@@ -22,6 +22,7 @@
 		3F795FA6D3CA31B6BC658F02 /* OFL-Manrope.txt in Resources */ = {isa = PBXBuildFile; fileRef = E1CDB94D52420E10837244D3 /* OFL-Manrope.txt */; };
 		40C4B6764368FC7F5F2C0E1C /* Manrope-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B96BC3D85FB55662271EE2EC /* Manrope-Bold.ttf */; };
 		42B68E3A1F2564FB758AA423 /* Transcript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96FEB295F99396E52A4187F6 /* Transcript.swift */; };
+		42C7D9542795E543BBE1DB70 /* TranslationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0784130EAD6095CFBDE5972 /* TranslationViews.swift */; };
 		5C5D169DD1809A4E3DF923C4 /* UpNextSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BBD7F0731F22BB37D19F2F /* UpNextSheet.swift */; };
 		6DFE752A06DBB15D1A3DB55D /* ImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8F2D05EFF27F71DB423A734 /* ImportSheet.swift */; };
 		6EE73D2605EAF8366E1FE1C0 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BA377CE80387242C728D0AA /* Components.swift */; };
@@ -80,6 +81,7 @@
 		9A030B2CF688D1C88AD23E9C /* EnglishSpeakerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnglishSpeakerApp.swift; sourceTree = "<group>"; };
 		9AEFFBF28000EAAD6F3B80E5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A0B4C0F5F76E0EEBAB6BBFF3 /* EnglishSpeakerUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = EnglishSpeakerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0784130EAD6095CFBDE5972 /* TranslationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationViews.swift; sourceTree = "<group>"; };
 		B3C49B6DEF86ADBEC96A4263 /* NotoSans-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "NotoSans-Regular.ttf"; sourceTree = "<group>"; };
 		B433B84FD01B42FEFE1B50FB /* SpaceGrotesk-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SpaceGrotesk-Bold.ttf"; sourceTree = "<group>"; };
 		B96BC3D85FB55662271EE2EC /* Manrope-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Manrope-Bold.ttf"; sourceTree = "<group>"; };
@@ -147,6 +149,7 @@
 				BE6FB03AA19199EE94E9D3C3 /* SearchView.swift */,
 				F333F7558A5F1D475179B1FA /* SettingsView.swift */,
 				96FEB295F99396E52A4187F6 /* Transcript.swift */,
+				B0784130EAD6095CFBDE5972 /* TranslationViews.swift */,
 				E5BBD7F0731F22BB37D19F2F /* UpNextSheet.swift */,
 				D715AD99CBB1208A676E6098 /* WordSheet.swift */,
 			);
@@ -360,6 +363,7 @@
 				3E62C3FBEDE3F60C4E453EF4 /* Store.swift in Sources */,
 				08A5AC33A1BA8479C83CC403 /* Theme.swift in Sources */,
 				42B68E3A1F2564FB758AA423 /* Transcript.swift in Sources */,
+				42C7D9542795E543BBE1DB70 /* TranslationViews.swift in Sources */,
 				5C5D169DD1809A4E3DF923C4 /* UpNextSheet.swift in Sources */,
 				1CAFA51D6BB6487A6451847E /* Wave.swift in Sources */,
 				06A4E743587D051F33329775 /* WordSheet.swift in Sources */,

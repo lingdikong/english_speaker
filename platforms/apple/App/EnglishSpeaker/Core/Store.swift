@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 import SpeakerCore
 import SwiftUI
@@ -57,6 +58,26 @@ final class Store {
     /// 非当前文章的时间轴缓存（“继续收听”的第 x/y 句）。
     @ObservationIgnored private var timelineCache: [String: Timeline] = [:]
 
+    // —— 翻译与查词 ——
+    var translator: TranslatorStatus?
+    /// 当前文章的译文：句下标 → 译文（智能精翻优先）。
+    var translations: [Int: SentenceTranslation] = [:]
+    var glossary: [GlossaryTerm] = []
+    var vocab: [VocabEntry] = []
+    /// 点词“举一反三” / 句子解析，键为 "句:词" / "句"（当前文章）。
+    var insights: [String: AiResult<WordInsight>] = [:]
+    var analyses: [Int: AiResult<SentenceAnalysis>] = [:]
+    /// 当前网络是否为蜂窝（下载大模型前提示）。
+    var onCellular = false
+    @ObservationIgnored private let pathMonitor = NWPathMonitor()
+    /// 双语：每句下方显示中文译文；打开时让核心优先翻译当前文章。
+    var bilingual = UserDefaults.standard.bool(forKey: "pref.bilingual") {
+        didSet {
+            UserDefaults.standard.set(bilingual, forKey: "pref.bilingual")
+            if bilingual { prepareTranslations() }
+        }
+    }
+
     // —— 界面 ——
     var isPlayerExpanded = false
 
@@ -86,6 +107,13 @@ final class Store {
         }
         voices = core?.voices() ?? []
         player = core?.playerState() ?? player
+        translator = core?.translatorStatus()
+        vocab = (try? core?.listVocab()) ?? []
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            let cellular = path.isExpensive
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.onCellular = cellular } }
+        }
+        pathMonitor.start(queue: .global(qos: .utility))
         reloadLibrary()
         if !UserDefaults.standard.bool(forKey: "seeded") {
             UserDefaults.standard.set(true, forKey: "seeded")
@@ -172,6 +200,18 @@ final class Store {
                 core?.pause()
             }
             nowPlaying?.updateElapsedIfNeeded()
+        case let .translationProgress(articleId, translation, _, _):
+            if articleId == player.articleId { translations[Int(translation.index)] = translation }
+        case let .translationsChanged(articleId):
+            if articleId == player.articleId { analyses.removeAll(); reloadTranslations() }
+        case let .wordInsightReady(articleId, s, w, insight, error):
+            if articleId == player.articleId { insights["\(s):\(w)"] = AiResult(value: insight, error: error) }
+        case let .sentenceAnalysisReady(articleId, s, analysis, error):
+            if articleId == player.articleId { analyses[Int(s)] = AiResult(value: analysis, error: error) }
+        case let .translatorChanged(status):
+            translator = status
+        case .vocabularyChanged:
+            vocab = (try? core?.listVocab()) ?? vocab
         }
     }
 
@@ -191,7 +231,102 @@ final class Store {
     func reloadTimeline() {
         guard let core, let id = player.articleId else { timeline = nil; return }
         timeline = try? core.timeline(id: id)
+        insights.removeAll()
+        analyses.removeAll()
+        reloadTranslations()
     }
+
+    // MARK: 翻译与查词
+
+    /// 有整句翻译能力（Fast 或 Smart）。
+    var canTranslate: Bool { translator?.active != nil }
+    /// 智能模式实际可用（已打开且模型已下载）。
+    var smartReady: Bool { translator?.active == .smart }
+
+    func reloadTranslations() {
+        guard bilingual, let core, let id = player.articleId else { return }
+        translations = Dictionary(((try? core.translations(id: id)) ?? []).map { (Int($0.index), $0) },
+                                  uniquingKeysWith: { _, b in b })
+    }
+
+    /// 打开双语 / 智能翻译时：让核心优先翻译正在播放的文章。
+    func prepareTranslations() {
+        guard let core, let id = player.articleId else { return }
+        try? core.prepareTranslations(id: id)
+        reloadTranslations()
+    }
+
+    func lookup(_ word: String) -> DictEntry? {
+        (try? core?.lookupWord(word: word)) ?? nil
+    }
+
+    func requestInsight(sentence: Int, word: Int) {
+        guard let core, let id = player.articleId else { return }
+        let key = "\(sentence):\(word)"
+        if insights[key]?.value != nil || insights[key]?.loading == true { return }
+        do {
+            if let v = try core.wordInsight(id: id, sentence: UInt32(sentence), word: UInt32(word)) {
+                insights[key] = AiResult(value: v)
+            } else {
+                insights[key] = AiResult(loading: true)
+            }
+        } catch { insights[key] = AiResult(error: "\(error)") }
+    }
+
+    func requestAnalysis(sentence: Int) {
+        guard let core, let id = player.articleId else { return }
+        if analyses[sentence]?.value != nil || analyses[sentence]?.loading == true { return }
+        do {
+            if let v = try core.sentenceAnalysis(id: id, sentence: UInt32(sentence)) {
+                analyses[sentence] = AiResult(value: v)
+            } else {
+                analyses[sentence] = AiResult(loading: true)
+            }
+        } catch { analyses[sentence] = AiResult(error: "\(error)") }
+    }
+
+    func setSmart(_ on: Bool) {
+        try? core?.setSmartTranslation(enabled: on)
+        translator = core?.translatorStatus()
+        if on { prepareTranslations() }
+    }
+
+    func downloadLlm() {
+        try? core?.downloadLlm()
+        translator = core?.translatorStatus()
+    }
+
+    func cancelLlmDownload() { core?.cancelLlmDownload() }
+
+    func deleteLlm() {
+        try? core?.setSmartTranslation(enabled: false)
+        try? core?.deleteLlm()
+        translator = core?.translatorStatus()
+    }
+
+    func reloadGlossary() { glossary = (try? core?.listGlossary()) ?? glossary }
+
+    /// 失败（如为空）时返回 false。
+    @discardableResult
+    func addGlossary(term: String, translation: String) -> Bool {
+        guard (try? core?.addGlossaryTerm(term: term, translation: translation)) != nil else { return false }
+        reloadGlossary()
+        return true
+    }
+
+    func removeGlossary(_ term: String) {
+        try? core?.removeGlossaryTerm(term: term)
+        reloadGlossary()
+    }
+
+    func isInVocab(_ word: String) -> Bool { vocab.contains { $0.word == word.lowercased() } }
+
+    func addVocab(sentence: Int, word: Int) {
+        guard let id = player.articleId else { return }
+        _ = try? core?.addVocab(id: id, sentence: UInt32(sentence), word: UInt32(word))
+    }
+
+    func removeVocab(_ word: String) { try? core?.removeVocab(word: word) }
 
     // MARK: 派生
 
@@ -520,6 +655,13 @@ final class Store {
         upNext.removeAll { $0 == id }
         if next { upNext.insert(id, at: 0) } else { upNext.append(id) }
     }
+}
+
+/// 智能解析的请求状态。
+struct AiResult<T> {
+    var loading = false
+    var value: T?
+    var error: String?
 }
 
 extension Array {
